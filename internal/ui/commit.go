@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"gito/internal/config"
 	"gito/internal/git"
 	"gito/internal/style"
 )
@@ -22,29 +23,17 @@ const (
 	stepDone
 )
 
-var commitTypes = []string{
-	"feat      새로운 기능",
-	"fix       버그 수정",
-	"docs      문서 변경",
-	"style     코드 스타일 변경",
-	"refactor  리팩토링",
-	"test      테스트 추가/수정",
-	"chore     빌드/설정 변경",
-}
-
-var commitTypeKeys = []string{
-	"feat", "fix", "docs", "style", "refactor", "test", "chore",
-}
-
 type commitModel struct {
-	step    commitStep
-	cursor  int
-	typeIdx int
-	scope   textinput.Model
-	subject textinput.Model
-	body    textinput.Model
-	err     error
-	done    bool
+	step      commitStep
+	cursor    int
+	typeIdx   int
+	typeKeys  []string // e.g. ["feat","fix",...]
+	typeLabels []string // e.g. ["feat   새 기능",...]
+	scope     textinput.Model
+	subject   textinput.Model
+	body      textinput.Model
+	err       error
+	done      bool
 }
 
 func newCommitModel() commitModel {
@@ -60,16 +49,26 @@ func newCommitModel() commitModel {
 	body.Placeholder = "optional longer description"
 	body.CharLimit = 500
 
+	cfg := config.Load()
+	keys := make([]string, len(cfg.CommitTypes))
+	labels := make([]string, len(cfg.CommitTypes))
+	for i, ct := range cfg.CommitTypes {
+		keys[i] = ct.Key
+		labels[i] = ct.Label
+	}
+
 	return commitModel{
-		step:    stepType,
-		scope:   scope,
-		subject: subject,
-		body:    body,
+		step:       stepType,
+		typeKeys:   keys,
+		typeLabels: labels,
+		scope:      scope,
+		subject:    subject,
+		body:       body,
 	}
 }
 
 func (m commitModel) buildMessage() string {
-	t := commitTypeKeys[m.typeIdx]
+	t := m.typeKeys[m.typeIdx]
 	scope := m.scope.Value()
 	subject := m.subject.Value()
 	body := m.body.Value()
@@ -102,7 +101,7 @@ func (m commitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case "down", "j":
-				if m.cursor < len(commitTypes)-1 {
+				if m.cursor < len(m.typeLabels)-1 {
 					m.cursor++
 				}
 			case "enter":
@@ -211,7 +210,7 @@ func (m commitModel) View() string {
 	switch m.step {
 	case stepType:
 		sb.WriteString(style.Label.Render("커밋 타입을 선택하세요:") + "\n\n")
-		for i, t := range commitTypes {
+		for i, t := range m.typeLabels {
 			if i == m.cursor {
 				sb.WriteString(style.Selected.Render("▶ "+t) + "\n")
 			} else {
@@ -222,13 +221,13 @@ func (m commitModel) View() string {
 
 	case stepScope:
 		sb.WriteString(style.Label.Render("스코프 입력 (선택사항):") + "\n\n")
-		sb.WriteString(style.Normal.Render(commitTypeKeys[m.typeIdx]+"  "))
+		sb.WriteString(style.Normal.Render(m.typeKeys[m.typeIdx]+"  "))
 		sb.WriteString(m.scope.View() + "\n")
 		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
 
 	case stepSubject:
 		sb.WriteString(style.Label.Render("커밋 메시지 입력:") + "\n\n")
-		prefix := commitTypeKeys[m.typeIdx]
+		prefix := m.typeKeys[m.typeIdx]
 		if m.scope.Value() != "" {
 			prefix += "(" + m.scope.Value() + ")"
 		}
