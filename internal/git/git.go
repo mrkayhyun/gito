@@ -14,16 +14,50 @@ func GetStatus() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func GetLog(n int) (string, error) {
+// CommitEntry holds parsed fields for a single git commit.
+type CommitEntry struct {
+	Hash    string // full 40-char hash
+	Short   string // 7-char abbreviated hash
+	Date    string // YYYY-MM-DD
+	Subject string // first line of commit message
+	Author  string // author name
+}
+
+func GetLogEntries(n int) ([]CommitEntry, error) {
 	out, err := exec.Command("git", "log",
 		fmt.Sprintf("--max-count=%d", n),
-		"--pretty=format:%C(yellow)%h%Creset %C(cyan)%ad%Creset %s %C(dim)(%an)%Creset",
+		"--pretty=format:%H%x00%h%x00%ad%x00%s%x00%an",
 		"--date=short",
 	).Output()
 	if err != nil {
-		return "", fmt.Errorf("git log: %w", err)
+		return nil, fmt.Errorf("git log: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	var entries []CommitEntry
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\x00", 5)
+		if len(parts) < 5 {
+			continue
+		}
+		entries = append(entries, CommitEntry{
+			Hash:    parts[0],
+			Short:   parts[1],
+			Date:    parts[2],
+			Subject: parts[3],
+			Author:  parts[4],
+		})
+	}
+	return entries, nil
+}
+
+func GetCommitDetail(hash string) (string, error) {
+	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", hash).Output()
+	if err != nil {
+		return "", fmt.Errorf("git show: %w", err)
+	}
+	return string(out), nil
 }
 
 func GetBranches() ([]string, string, error) {

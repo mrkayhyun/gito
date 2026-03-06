@@ -7,92 +7,261 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
 	"gito/internal/style"
 )
 
+// ── lipgloss styles for the commit list ──────────────────────────────────────
+
+var (
+	hashStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
+	dateStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
+	msgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
+	authorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#636363"))
+
+	selBar     = lipgloss.NewStyle().Background(lipgloss.Color("#312E55"))
+	selHash    = hashStyle.Background(lipgloss.Color("#312E55"))
+	selDate    = dateStyle.Background(lipgloss.Color("#312E55"))
+	selMsg     = msgStyle.Bold(true).Background(lipgloss.Color("#312E55"))
+	selAuthor  = authorStyle.Background(lipgloss.Color("#312E55"))
+	cursorGlyp = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true)
+)
+
+// ── model ────────────────────────────────────────────────────────────────────
+
+type logPane int
+
+const (
+	paneList   logPane = iota
+	paneDetail         // showing git show output
+)
+
 type logModel struct {
-	viewport viewport.Model
-	ready    bool
-	content  string
+	commits []git.CommitEntry
+	cursor  int
+	offset  int // first visible row index
+	pane    logPane
+
+	vp          viewport.Model
+	vpReady     bool
+	vpContent   string // raw content waiting to be set when vp is init'd
+
+	width  int
+	height int
 }
 
-func (m logModel) Init() tea.Cmd {
-	return nil
+// ── tea messages ─────────────────────────────────────────────────────────────
+
+type detailReadyMsg struct{ content string }
+
+func fetchDetail(hash string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := git.GetCommitDetail(hash)
+		if err != nil {
+			return detailReadyMsg{"Error loading detail: " + err.Error()}
+		}
+		return detailReadyMsg{out}
+	}
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+func (m logModel) Init() tea.Cmd { return nil }
+
+// ── Update ───────────────────────────────────────────────────────────────────
 
 func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		}
+
+	// ---- window resize ----
 	case tea.WindowSizeMsg:
-		headerHeight := 3
-		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-headerHeight)
-			m.viewport.SetContent(m.content)
-			m.ready = true
-		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - headerHeight
+		m.width, m.height = msg.Width, msg.Height
+		if m.pane == paneDetail {
+			if m.vpReady {
+				m.vp.Width = msg.Width
+				m.vp.Height = m.detailHeight()
+			}
 		}
+		return m, nil
+
+	// ---- detail content loaded ----
+	case detailReadyMsg:
+		m.vpContent = msg.content
+		m.vp = viewport.New(m.width, m.detailHeight())
+		m.vp.SetContent(msg.content)
+		m.vpReady = true
+		return m, nil
+
+	// ---- keyboard ----
+	case tea.KeyMsg:
+		if m.pane == paneDetail {
+			return m.updateDetail(msg)
+		}
+		return m.updateList(msg)
 	}
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	return m, nil
 }
+
+func (m logModel) detailHeight() int {
+	h := m.height - 3 // header (2 lines) + blank line
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+func (m logModel) visibleRows() int {
+	v := m.height - 3 // title + hint + blank
+	if v < 1 {
+		return 10
+	}
+	return v
+}
+
+func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	vis := m.visibleRows()
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+			if m.cursor < m.offset {
+				m.offset = m.cursor
+			}
+		}
+	case "down", "j":
+		if m.cursor < len(m.commits)-1 {
+			m.cursor++
+			if m.cursor >= m.offset+vis {
+				m.offset = m.cursor - vis + 1
+			}
+		}
+	case "g": // jump to top
+		m.cursor = 0
+		m.offset = 0
+	case "G": // jump to bottom
+		m.cursor = len(m.commits) - 1
+		if m.cursor-vis+1 > 0 {
+			m.offset = m.cursor - vis + 1
+		}
+	case "enter":
+		if len(m.commits) == 0 {
+			return m, nil
+		}
+		m.pane = paneDetail
+		m.vpReady = false
+		return m, fetchDetail(m.commits[m.cursor].Hash)
+	}
+	return m, nil
+}
+
+func (m logModel) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc":
+		m.pane = paneList
+		m.vpReady = false
+		return m, nil
+	}
+	if m.vpReady {
+		var cmd tea.Cmd
+		m.vp, cmd = m.vp.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// ── View ─────────────────────────────────────────────────────────────────────
 
 func (m logModel) View() string {
-	if !m.ready {
-		return "\n  Loading..."
+	if m.pane == paneDetail {
+		return m.viewDetail()
 	}
-
-	pct := int(m.viewport.ScrollPercent() * 100)
-	header := style.Title.Render("gito log") +
-		style.Dimmed.Render(fmt.Sprintf("  %d%%", pct)) + "\n" +
-		style.Dimmed.Render("↑/↓ j/k: scroll   PgUp/PgDn: page   q: quit") + "\n\n"
-
-	return header + m.viewport.View()
+	return m.viewList()
 }
 
+func (m logModel) viewList() string {
+	var sb strings.Builder
+
+	// header
+	sb.WriteString(style.Title.Render("gito log"))
+	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
+	sb.WriteString("\n")
+	sb.WriteString(style.Dimmed.Render("↑/↓ j/k: 이동   g/G: 처음/끝   enter: 상세   q: 종료"))
+	sb.WriteString("\n\n")
+
+	vis := m.visibleRows()
+	end := m.offset + vis
+	if end > len(m.commits) {
+		end = len(m.commits)
+	}
+
+	maxSubject := m.width - 30 // leave room for hash + date + author
+	if maxSubject < 20 {
+		maxSubject = 20
+	}
+
+	for i := m.offset; i < end; i++ {
+		c := m.commits[i]
+		subj := c.Subject
+		if len([]rune(subj)) > maxSubject {
+			subj = string([]rune(subj)[:maxSubject-1]) + "…"
+		}
+
+		if i == m.cursor {
+			sb.WriteString(cursorGlyp.Render("▶") + " ")
+			sb.WriteString(selHash.Render(c.Short) + " ")
+			sb.WriteString(selDate.Render(c.Date) + " ")
+			sb.WriteString(selMsg.Render(subj) + " ")
+			sb.WriteString(selAuthor.Render("(" + c.Author + ")"))
+			sb.WriteString(selBar.Render(""))
+		} else {
+			sb.WriteString("  ")
+			sb.WriteString(hashStyle.Render(c.Short) + " ")
+			sb.WriteString(dateStyle.Render(c.Date) + " ")
+			sb.WriteString(msgStyle.Render(subj) + " ")
+			sb.WriteString(authorStyle.Render("(" + c.Author + ")"))
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
+func (m logModel) viewDetail() string {
+	c := m.commits[m.cursor]
+
+	header := style.Title.Render("gito log  ›  detail") + "\n" +
+		hashStyle.Render(c.Short) + "  " +
+		dateStyle.Render(c.Date) + "  " +
+		msgStyle.Render(c.Subject) + "  " +
+		authorStyle.Render("("+c.Author+")") + "\n" +
+		style.Dimmed.Render("↑/↓ j/k: 스크롤   PgUp/PgDn: 페이지   q/esc: 목록으로") + "\n\n"
+
+	if !m.vpReady {
+		return header + style.Dimmed.Render("  Loading...")
+	}
+	return header + m.vp.View()
+}
+
+// ── RunLog ───────────────────────────────────────────────────────────────────
+
 func RunLog() {
-	content, err := git.GetLog(200)
+	entries, err := git.GetLogEntries(500)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	if content == "" {
+	if len(entries) == 0 {
 		fmt.Println("No commits yet.")
 		return
 	}
 
-	// Strip ANSI for viewport (plain text display)
-	plain := stripANSI(content)
-	m := logModel{content: plain}
+	m := logModel{commits: entries}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-// stripANSI removes ANSI escape sequences from a string.
-func stripANSI(s string) string {
-	var result strings.Builder
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			i += 2
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			i++ // skip 'm'
-		} else {
-			result.WriteByte(s[i])
-			i++
-		}
-	}
-	return result.String()
 }
