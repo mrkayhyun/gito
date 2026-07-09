@@ -14,6 +14,15 @@ func GetStatus() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// IsRepo reports whether the current working directory is inside a git work tree.
+func IsRepo() bool {
+	out, err := exec.Command("git", "rev-parse", "--is-inside-work-tree").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
+}
+
 // CommitEntry holds parsed fields for a single git commit.
 type CommitEntry struct {
 	Hash    string // full 40-char hash

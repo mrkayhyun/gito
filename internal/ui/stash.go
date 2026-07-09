@@ -157,7 +157,7 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.successMsg = ""
 
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -215,7 +215,7 @@ func (m stashModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito stash"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d entries", len(m.stashes))) + "\n")
 	sb.WriteString(style.Dimmed.Render(
-		"enter/p: pop   a: apply   d: show diff   D: drop   q: quit",
+		"enter/p: pop   a: apply   d: show diff   D: drop   q/esc: quit",
 	) + "\n\n")
 
 	if m.confirmDrop && m.cursor < len(m.stashes) {

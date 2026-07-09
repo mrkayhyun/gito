@@ -213,6 +213,30 @@ func TestGetRemotes(t *testing.T) {
 	}
 }
 
+func TestIsRepo(t *testing.T) {
+	// inside a repo
+	cleanup := setupRepo(t)
+	if !IsRepo() {
+		cleanup()
+		t.Fatalf("IsRepo should be true inside a git repo")
+	}
+	cleanup()
+
+	// outside any repo: use a fresh temp dir that is not a git repo
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(orig)
+	if IsRepo() {
+		t.Errorf("IsRepo should be false outside a git repo (%s)", dir)
+	}
+}
+
 func contains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {

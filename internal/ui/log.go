@@ -122,7 +122,7 @@ func (m logModel) visibleRows() int {
 func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	vis := m.visibleRows()
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -188,7 +188,7 @@ func (m logModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito log"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
 	sb.WriteString("\n")
-	sb.WriteString(style.Dimmed.Render("↑/↓ j/k: 이동   g/G: 처음/끝   enter: 상세   q: 종료"))
+	sb.WriteString(style.Dimmed.Render("↑/↓ j/k: 이동   g/G: 처음/끝   enter: 상세   q/esc: 종료"))
 	sb.WriteString("\n\n")
 
 	vis := m.visibleRows()

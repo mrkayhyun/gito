@@ -191,7 +191,7 @@ func (m statusModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -268,7 +268,7 @@ func (m statusModel) viewList() string {
 		"  staged:%d  unstaged:%d  untracked:%d", nStaged, nUnstaged, nUntracked,
 	)) + "\n")
 	sb.WriteString(style.Dimmed.Render(
-		"space: stage/unstage   a: stage all   d: diff   D: discard   q: quit",
+		"space: stage/unstage   a: stage all   d: diff   D: discard   q/esc: quit",
 	) + "\n\n")
 
 	if m.confirmDiscard && m.cursor < len(m.entries) {

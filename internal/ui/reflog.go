@@ -97,7 +97,7 @@ func (m reflogModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.errMsg = ""
 	vis := m.visibleRows()
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -162,7 +162,7 @@ func (m reflogModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito reflog"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d entries", len(m.entries))) + "\n")
 	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   g/G: 처음/끝   b: 이 지점으로 브랜치 생성   q: 종료",
+		"↑/↓ j/k: 이동   g/G: 처음/끝   b: 이 지점으로 브랜치 생성   q/esc: 종료",
 	) + "\n\n")
 
 	if m.errMsg != "" {

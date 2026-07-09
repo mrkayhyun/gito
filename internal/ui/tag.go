@@ -226,7 +226,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.successMsg = ""
 
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -300,7 +300,7 @@ func (m tagModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito tag"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d tags", len(m.tags))) + "\n")
 	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   enter/d: 상세   c: 생성   p: push   P: 원격삭제   D: 삭제   q: 종료",
+		"↑/↓ j/k: 이동   enter/d: 상세   c: 생성   p: push   P: 원격삭제   D: 삭제   q/esc: 종료",
 	) + "\n\n")
 
 	if m.confirmDelete && m.cursor < len(m.tags) {

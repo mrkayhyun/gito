@@ -139,7 +139,7 @@ func (m remoteModel) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m remoteModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.errMsg = ""
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "up", "k":
 		if m.cursor > 0 {
@@ -178,7 +178,7 @@ func (m remoteModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito remote"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d remotes", len(m.remotes))) + "\n")
 	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   f: fetch   F: fetch all   r: 새로고침   q: 종료",
+		"↑/↓ j/k: 이동   f: fetch   F: fetch all   r: 새로고침   q/esc: 종료",
 	) + "\n\n")
 
 	// upstream ahead/behind summary for current branch
