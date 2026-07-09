@@ -24,16 +24,17 @@ const (
 )
 
 type commitModel struct {
-	step      commitStep
-	cursor    int
-	typeIdx   int
-	typeKeys  []string // e.g. ["feat","fix",...]
+	step       commitStep
+	cursor     int
+	typeIdx    int
+	typeKeys   []string // e.g. ["feat","fix",...]
 	typeLabels []string // e.g. ["feat   새 기능",...]
-	scope     textinput.Model
-	subject   textinput.Model
-	body      textinput.Model
-	err       error
-	done      bool
+	scope      textinput.Model
+	subject    textinput.Model
+	body       textinput.Model
+	err        error
+	done       bool
+	amend      bool // committed via --amend
 }
 
 func newCommitModel() commitModel {
@@ -178,6 +179,12 @@ func (m commitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				m.done = true
 				return m, tea.Quit
+			case "a": // amend the previous commit instead of creating a new one
+				err := git.CommitAmend(m.buildMessage())
+				m.err = err
+				m.done = true
+				m.amend = true
+				return m, tea.Quit
 			case "e":
 				m.step = stepSubject
 				cmd := m.subject.Focus()
@@ -221,7 +228,7 @@ func (m commitModel) View() string {
 
 	case stepScope:
 		sb.WriteString(style.Label.Render("스코프 입력 (선택사항):") + "\n\n")
-		sb.WriteString(style.Normal.Render(m.typeKeys[m.typeIdx]+"  "))
+		sb.WriteString(style.Normal.Render(m.typeKeys[m.typeIdx] + "  "))
 		sb.WriteString(m.scope.View() + "\n")
 		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
 
@@ -231,7 +238,7 @@ func (m commitModel) View() string {
 		if m.scope.Value() != "" {
 			prefix += "(" + m.scope.Value() + ")"
 		}
-		sb.WriteString(style.Normal.Render(prefix+": "))
+		sb.WriteString(style.Normal.Render(prefix + ": "))
 		sb.WriteString(m.subject.View() + "\n")
 		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
 
@@ -246,7 +253,11 @@ func (m commitModel) View() string {
 		sb.WriteString(style.Label.Render("커밋하시겠습니까?  "))
 		sb.WriteString(style.Selected.Render(" y ") + style.Normal.Render(" yes   "))
 		sb.WriteString(style.Selected.Render(" n ") + style.Normal.Render(" no   "))
+		sb.WriteString(style.Selected.Render(" a ") + style.Normal.Render(" amend   "))
 		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" edit\n"))
+		if last := git.GetLastCommitSubject(); last != "" {
+			sb.WriteString("\n" + style.Dimmed.Render("a(amend) 시 대체될 직전 커밋: "+last) + "\n")
+		}
 	}
 
 	return sb.String()
@@ -277,7 +288,11 @@ func RunCommit() {
 		os.Exit(1)
 	}
 	if final.done {
-		fmt.Println(style.Success.Render("✓ Committed successfully"))
+		if final.amend {
+			fmt.Println(style.Success.Render("✓ Amended previous commit"))
+		} else {
+			fmt.Println(style.Success.Render("✓ Committed successfully"))
+		}
 		fmt.Println(style.Dimmed.Render(final.buildMessage()))
 	}
 }

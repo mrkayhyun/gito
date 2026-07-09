@@ -1,0 +1,6 @@
+# Build artifacts
+/gito
+
+# Go
+*.test
+*.out

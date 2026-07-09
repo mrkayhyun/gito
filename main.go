@@ -24,6 +24,16 @@ func main() {
 		ui.RunStatus()
 	case "stash":
 		ui.RunStash()
+	case "tag":
+		ui.RunTag()
+	case "remote":
+		ui.RunRemote()
+	case "diff":
+		ui.RunDiff()
+	case "reflog":
+		ui.RunReflog()
+	case "blame":
+		ui.RunBlame()
 	default:
 		printHelp()
 		os.Exit(1)
@@ -36,9 +46,14 @@ func printHelp() {
 Usage:
   gito commit    Interactive commit wizard (5-step, config-driven types)
   gito log       Scrollable log viewer  (↑/↓ navigate, enter: detail)
-  gito branch    Fuzzy branch switcher
+  gito branch    Fuzzy branch switcher / create / rename / delete
   gito status    Interactive stage / unstage / diff / discard
   gito stash     Stash list  (pop / apply / show diff / drop)
+  gito tag       Tag manager (create / delete / push / show diff)
+  gito remote    Remote list (fetch / ahead-behind status)
+  gito diff      Compare two refs (branch/tag) and view the diff
+  gito reflog    Browse reflog and recover commits into a new branch
+  gito blame     Pick a file and view line-by-line blame
 
 Config (optional):
   ./gito.json  or  ~/.config/gito/config.json

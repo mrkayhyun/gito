@@ -43,9 +43,9 @@ type logModel struct {
 	offset  int // first visible row index
 	pane    logPane
 
-	vp          viewport.Model
-	vpReady     bool
-	vpContent   string // raw content waiting to be set when vp is init'd
+	vp        viewport.Model
+	vpReady   bool
+	vpContent string // raw content waiting to be set when vp is init'd
 
 	width  int
 	height int
