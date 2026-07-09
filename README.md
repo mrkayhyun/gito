@@ -80,6 +80,22 @@ main.go                 // 서브커맨드 라우팅 + help
 
 ## 설치
 
+### 1) 설치 스크립트 (권장, zsh)
+
+저장소에서 빌드하고 `~/.local/bin`에 설치한 뒤 `~/.zshrc`의 PATH까지 자동 설정합니다.
+
+```bash
+git clone <repo-url> && cd gito
+./install.sh
+source ~/.zshrc   # 또는 새 터미널 열기
+```
+
+- 설치 위치 변경: `INSTALL_DIR=/usr/local/bin ./install.sh`
+- 제거: `./install.sh --uninstall` (바이너리 + `~/.zshrc` 블록 삭제)
+- `~/.zshrc`에는 마커 블록만 추가되며, 여러 번 실행해도 중복되지 않습니다(멱등).
+
+### 2) 수동 빌드
+
 ```bash
 # 소스에서 빌드
 git clone <repo-url> && cd gito
@@ -90,6 +106,7 @@ go install .
 ```
 
 빌드 산출물은 의존성 없는 단일 바이너리입니다. `PATH`에 두고 사용하세요.
+버전을 새기려면: `go build -ldflags "-X main.version=v1.0.0" -o gito .`
 
 ## 사용법
 

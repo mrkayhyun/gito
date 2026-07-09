@@ -1,5 +1,6 @@
 # Build artifacts
 /gito
+/dist/
 
 # Go
 *.test
