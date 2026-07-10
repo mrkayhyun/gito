@@ -5,12 +5,26 @@ import (
 	"os"
 	"strings"
 
+	"unicode/utf8"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"gito/internal/config"
 	"gito/internal/git"
 	"gito/internal/style"
 )
+
+// subjectRecommendedLen is the Conventional Commits recommended maximum length
+// for a commit subject line. The textinput hard CharLimit stays higher (72);
+// this is a soft guideline surfaced to the user.
+const subjectRecommendedLen = 50
+
+// subjectLenHint returns a counter label like "32/50" for the given subject
+// rune count and reports whether the recommended length has been exceeded.
+// warn becomes true only once n is strictly greater than the recommended limit.
+func subjectLenHint(n int) (label string, warn bool) {
+	return fmt.Sprintf("%d/%d", n, subjectRecommendedLen), n > subjectRecommendedLen
+}
 
 type commitStep int
 
@@ -240,6 +254,12 @@ func (m commitModel) View() string {
 		}
 		sb.WriteString(style.Normal.Render(prefix + ": "))
 		sb.WriteString(m.subject.View() + "\n")
+		label, warn := subjectLenHint(utf8.RuneCountInString(m.subject.Value()))
+		if warn {
+			sb.WriteString(style.Failure.Render(label+" (권장 "+fmt.Sprintf("%d", subjectRecommendedLen)+"자 초과)") + "\n")
+		} else {
+			sb.WriteString(style.Dimmed.Render(label) + "\n")
+		}
 		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
 
 	case stepBody:

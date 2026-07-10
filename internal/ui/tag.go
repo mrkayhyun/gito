@@ -46,10 +46,11 @@ type tagModel struct {
 	msgInput  textinput.Model
 	createIdx int // 0 = name field, 1 = message field
 
-	confirmDelete bool
-	errMsg        string
-	successMsg    string
-	width, height int
+	confirmDelete       bool
+	confirmRemoteDelete bool
+	errMsg              string
+	successMsg          string
+	width, height       int
 }
 
 // ── messages ──────────────────────────────────────────────────────────────────
@@ -202,7 +203,7 @@ func (m *tagModel) focusCreateField() tea.Cmd {
 }
 
 func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// delete confirmation
+	// local delete confirmation
 	if m.confirmDelete {
 		switch msg.String() {
 		case "y", "Y":
@@ -218,6 +219,26 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, doTagLoad()
 		default:
 			m.confirmDelete = false
+		}
+		return m, nil
+	}
+
+	// remote delete confirmation
+	if m.confirmRemoteDelete {
+		switch msg.String() {
+		case "y", "Y":
+			m.confirmRemoteDelete = false
+			if m.cursor < len(m.tags) {
+				name := m.tags[m.cursor].Name
+				if err := git.DeleteRemoteTag(name, "origin"); err != nil {
+					m.errMsg = err.Error()
+					return m, nil
+				}
+				m.successMsg = "Deleted " + name + " on origin"
+			}
+			return m, doTagLoad()
+		default:
+			m.confirmRemoteDelete = false
 		}
 		return m, nil
 	}
@@ -245,11 +266,15 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter", "d": // show detail/diff
 		if m.cursor < len(m.tags) {
+			m.confirmDelete = false
+			m.confirmRemoteDelete = false
 			m.pane = tagPaneShow
 			m.vpReady = false
 			return m, doTagShow(m.tags[m.cursor].Name)
 		}
 	case "c": // create tag on HEAD
+		m.confirmDelete = false
+		m.confirmRemoteDelete = false
 		m.nameInput.SetValue("")
 		m.msgInput.SetValue("")
 		m.createIdx = 0
@@ -266,15 +291,12 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "P": // delete tag on origin
 		if m.cursor < len(m.tags) {
-			name := m.tags[m.cursor].Name
-			if err := git.DeleteRemoteTag(name, "origin"); err != nil {
-				m.errMsg = err.Error()
-				return m, nil
-			}
-			m.successMsg = "Deleted " + name + " on origin"
+			m.confirmDelete = false
+			m.confirmRemoteDelete = true
 		}
 	case "D": // delete
 		if m.cursor < len(m.tags) {
+			m.confirmRemoteDelete = false
 			m.confirmDelete = true
 		}
 	}
@@ -306,6 +328,12 @@ func (m tagModel) viewList() string {
 	if m.confirmDelete && m.cursor < len(m.tags) {
 		sb.WriteString(style.Failure.Render(
 			"태그를 삭제하시겠습니까? "+m.tags[m.cursor].Name,
+		) + "\n")
+		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+	}
+	if m.confirmRemoteDelete && m.cursor < len(m.tags) {
+		sb.WriteString(style.Failure.Render(
+			"원격(origin)에서 태그를 삭제하시겠습니까? "+m.tags[m.cursor].Name,
 		) + "\n")
 		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
 	}
