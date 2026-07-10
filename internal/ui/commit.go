@@ -203,6 +203,10 @@ func (m commitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.step = stepSubject
 				cmd := m.subject.Focus()
 				return m, cmd
+			case "esc":
+				m.step = stepBody
+				cmd := m.body.Focus()
+				return m, cmd
 			}
 		}
 	}

@@ -68,6 +68,24 @@ func TestMenuNumberSelection(t *testing.T) {
 	}
 }
 
+func TestMenuZeroSelectsTenthItem(t *testing.T) {
+	if len(MenuItems) < 10 {
+		t.Skipf("MenuItems has %d entries, need at least 10 for the '0' shortcut", len(MenuItems))
+	}
+	m := menuModel{}
+	updated, _ := m.Update(keyMsg("0"))
+	final := updated.(menuModel)
+	if final.chosen != MenuItems[9].Key {
+		t.Errorf("'0' should select MenuItems[9].Key = %q, got %q", MenuItems[9].Key, final.chosen)
+	}
+	if final.chosen != "blame" {
+		t.Errorf("'0' should select the 10th command \"blame\", got %q", final.chosen)
+	}
+	if final.quit {
+		t.Errorf("'0' selection should not set quit")
+	}
+}
+
 func TestMenuQuitKeys(t *testing.T) {
 	for _, k := range []string{"q", "esc", "ctrl+c"} {
 		var msg = keyMsg(k)
