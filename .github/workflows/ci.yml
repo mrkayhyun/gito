@@ -47,6 +47,6 @@ jobs:
       # arguments (see internal/git/validate.go). gosec cannot prove those calls safe,
       # so the rule is a systemic false positive here; all other rules stay active.
       - name: Security scan (gosec)
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.22.9
         with:
           args: '-exclude=G204 ./...'

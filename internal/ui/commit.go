@@ -279,6 +279,7 @@ func (m commitModel) View() string {
 		sb.WriteString(style.Selected.Render(" n ") + style.Normal.Render(" no   "))
 		sb.WriteString(style.Selected.Render(" a ") + style.Normal.Render(" amend   "))
 		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" edit\n"))
+		sb.WriteString("\n" + style.Dimmed.Render("esc: 이전 (본문)"))
 		if last := git.GetLastCommitSubject(); last != "" {
 			sb.WriteString("\n" + style.Dimmed.Render("a(amend) 시 대체될 직전 커밋: "+last) + "\n")
 		}

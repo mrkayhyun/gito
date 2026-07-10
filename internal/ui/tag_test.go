@@ -221,6 +221,99 @@ func TestTagRemoteDeleteEndToEnd(t *testing.T) {
 	}
 }
 
+// TestTagLocalDeleteEndToEnd proves that the local-delete confirmation gate
+// actually guards a destructive git operation: 'D' then 'n' leaves the local
+// tag intact, while 'D' then 'y' removes it via git.DeleteTag.
+func TestTagLocalDeleteEndToEnd(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	setupUILocalTagRepo(t)
+
+	tags, err := git.GetTags()
+	if err != nil {
+		t.Fatalf("GetTags: %v", err)
+	}
+	if len(tags) == 0 {
+		t.Fatalf("expected at least one tag after setup")
+	}
+
+	// (1) 'D' then 'n' must NOT delete the local tag.
+	m := tagModel{tags: tags, cursor: 0, pane: tagPaneList}
+	updated, _ := m.Update(keyMsg("D"))
+	m2 := updated.(tagModel)
+	if !m2.confirmDelete {
+		t.Fatalf("'D' should arm local-delete confirmation")
+	}
+	updated, _ = m2.Update(keyMsg("n"))
+	m3 := updated.(tagModel)
+	if m3.confirmDelete {
+		t.Fatalf("'n' should cancel local-delete confirmation")
+	}
+	if got := localTags(t); !strings.Contains(got, "v1.2.3") {
+		t.Fatalf("cancel should leave local tag intact, git tag --list:\n%s", got)
+	}
+
+	// (2) 'D' then 'y' must delete the local tag.
+	m = tagModel{tags: tags, cursor: 0, pane: tagPaneList}
+	updated, _ = m.Update(keyMsg("D"))
+	m2 = updated.(tagModel)
+	updated, cmd := m2.Update(keyMsg("y"))
+	m4 := updated.(tagModel)
+	if m4.confirmDelete {
+		t.Fatalf("'y' should clear the local-delete confirmation")
+	}
+	if m4.errMsg != "" {
+		t.Fatalf("local delete returned error: %s", m4.errMsg)
+	}
+	if cmd == nil {
+		t.Fatalf("'y' should return a reload command")
+	}
+	if got := localTags(t); strings.Contains(got, "v1.2.3") {
+		t.Fatalf("confirm should remove the local tag, git tag --list:\n%s", got)
+	}
+}
+
+// setupUILocalTagRepo creates a temp working repo (chdir into it, restored on
+// cleanup) with a single commit and a local tag v1.2.3. No remote is created,
+// since the local-delete path never touches a remote.
+func setupUILocalTagRepo(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test User")
+	if err := os.WriteFile(dir+"/README.md", []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-q", "-m", "initial commit")
+
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	runGit(t, ".", "tag", "v1.2.3")
+}
+
+// localTags returns the output of `git tag --list` in the current working
+// directory for local-tag presence assertions.
+func localTags(t *testing.T) string {
+	t.Helper()
+	cmd := exec.Command("git", "tag", "--list")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git tag --list: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
 // setupUITagRepo creates a temp working repo (chdir into it, restored on
 // cleanup), adds a bare origin remote, creates tag v1.2.3, and pushes it. It
 // returns the bare remote path for ls-remote assertions.
