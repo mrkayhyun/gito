@@ -531,8 +531,14 @@ func GetAheadBehind() (ahead, behind int, hasUpstream bool) {
 	if len(fields) != 2 {
 		return 0, 0, false
 	}
-	fmt.Sscanf(fields[0], "%d", &behind)
-	fmt.Sscanf(fields[1], "%d", &ahead)
+	// Parse both counts; on malformed input leave the value at 0 (behaviour
+	// equivalent to the previous ignore-error path for well-formed output).
+	if _, err := fmt.Sscanf(fields[0], "%d", &behind); err != nil {
+		behind = 0
+	}
+	if _, err := fmt.Sscanf(fields[1], "%d", &ahead); err != nil {
+		ahead = 0
+	}
 	return ahead, behind, true
 }
 

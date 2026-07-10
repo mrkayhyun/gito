@@ -41,3 +41,12 @@ jobs:
 
       - name: Test
         run: go test -race ./...
+
+      # G204 (subprocess launched with variable args) is excluded because gito is a
+      # git-wrapper CLI that execs `git` with internally-constructed, ref-validated
+      # arguments (see internal/git/validate.go). gosec cannot prove those calls safe,
+      # so the rule is a systemic false positive here; all other rules stay active.
+      - name: Security scan (gosec)
+        uses: securego/gosec@master
+        with:
+          args: '-exclude=G204 ./...'
