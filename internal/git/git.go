@@ -542,7 +542,10 @@ func Fetch(remote string) (string, error) {
 	if strings.TrimSpace(remote) == "" {
 		args = append(args, "--all")
 	} else {
-		args = append(args, remote)
+		// Guard the remote positional with '--end-of-options' so it can never be
+		// parsed as an option, mirroring every other positional-taking wrapper
+		// (PushTag, DeleteRemoteTag, etc.) as defense-in-depth.
+		args = append(args, "--end-of-options", remote)
 	}
 	out, err := exec.Command("git", args...).CombinedOutput()
 	if err != nil {
