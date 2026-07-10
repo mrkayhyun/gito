@@ -62,7 +62,7 @@ func GetLogEntries(n int) ([]CommitEntry, error) {
 }
 
 func GetCommitDetail(hash string) (string, error) {
-	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", hash).Output()
+	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", "--end-of-options", hash).Output()
 	if err != nil {
 		return "", fmt.Errorf("git show: %w", err)
 	}
@@ -119,7 +119,7 @@ func GetLastCommitSubject() string {
 
 func SwitchBranch(name string) error {
 	name = strings.TrimPrefix(name, "remotes/origin/")
-	out, err := exec.Command("git", "checkout", name).CombinedOutput()
+	out, err := exec.Command("git", "checkout", "--end-of-options", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -128,15 +128,19 @@ func SwitchBranch(name string) error {
 
 // CreateBranch creates a new branch. When checkout is true it also switches to it.
 func CreateBranch(name string, checkout bool) error {
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("branch name is required")
+	if err := ValidateRefName(name); err != nil {
+		return err
 	}
 	var out []byte
 	var err error
 	if checkout {
+		// 'git checkout -b' consumes the next token as the new branch name, so a
+		// '--end-of-options' guard cannot precede it. The name is already validated
+		// by ValidateRefName above (it cannot start with '-'), so passing it as a
+		// validated positional is safe against option injection.
 		out, err = exec.Command("git", "checkout", "-b", name).CombinedOutput()
 	} else {
-		out, err = exec.Command("git", "branch", name).CombinedOutput()
+		out, err = exec.Command("git", "branch", "--end-of-options", name).CombinedOutput()
 	}
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
@@ -151,7 +155,7 @@ func DeleteBranch(name string, force bool) error {
 	if force {
 		flag = "-D"
 	}
-	out, err := exec.Command("git", "branch", flag, name).CombinedOutput()
+	out, err := exec.Command("git", "branch", flag, "--end-of-options", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -160,11 +164,11 @@ func DeleteBranch(name string, force bool) error {
 
 // RenameBranch renames a branch (old -> new).
 func RenameBranch(oldName, newName string) error {
-	if strings.TrimSpace(newName) == "" {
-		return fmt.Errorf("new branch name is required")
+	if err := ValidateRefName(newName); err != nil {
+		return err
 	}
 	oldName = strings.TrimPrefix(oldName, "remotes/origin/")
-	out, err := exec.Command("git", "branch", "-m", oldName, newName).CombinedOutput()
+	out, err := exec.Command("git", "branch", "-m", "--end-of-options", oldName, newName).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -311,7 +315,7 @@ func GetStashes() ([]StashEntry, error) {
 }
 
 func StashPop(ref string) error {
-	out, err := exec.Command("git", "stash", "pop", ref).CombinedOutput()
+	out, err := exec.Command("git", "stash", "pop", "--end-of-options", ref).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -319,7 +323,7 @@ func StashPop(ref string) error {
 }
 
 func StashApply(ref string) error {
-	out, err := exec.Command("git", "stash", "apply", ref).CombinedOutput()
+	out, err := exec.Command("git", "stash", "apply", "--end-of-options", ref).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -327,7 +331,7 @@ func StashApply(ref string) error {
 }
 
 func StashDrop(ref string) error {
-	out, err := exec.Command("git", "stash", "drop", ref).CombinedOutput()
+	out, err := exec.Command("git", "stash", "drop", "--end-of-options", ref).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -335,7 +339,7 @@ func StashDrop(ref string) error {
 }
 
 func StashShow(ref string) (string, error) {
-	out, err := exec.Command("git", "stash", "show", "--color=always", "-p", ref).Output()
+	out, err := exec.Command("git", "stash", "show", "--color=always", "-p", "--end-of-options", ref).Output()
 	if err != nil {
 		return "", fmt.Errorf("git stash show: %w", err)
 	}
@@ -402,14 +406,14 @@ func GetTags() ([]TagEntry, error) {
 // CreateTag creates a tag at the given ref (defaults to HEAD when empty).
 // If message is non-empty an annotated tag is created, otherwise a lightweight tag.
 func CreateTag(name, message, ref string) error {
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("tag name is required")
+	if err := ValidateRefName(name); err != nil {
+		return err
 	}
 	args := []string{"tag"}
 	if strings.TrimSpace(message) != "" {
 		args = append(args, "-a", "-m", message)
 	}
-	args = append(args, name)
+	args = append(args, "--end-of-options", name)
 	if strings.TrimSpace(ref) != "" {
 		args = append(args, ref)
 	}
@@ -422,7 +426,7 @@ func CreateTag(name, message, ref string) error {
 
 // DeleteTag deletes a local tag.
 func DeleteTag(name string) error {
-	out, err := exec.Command("git", "tag", "-d", name).CombinedOutput()
+	out, err := exec.Command("git", "tag", "-d", "--end-of-options", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -431,7 +435,7 @@ func DeleteTag(name string) error {
 
 // ShowTag returns the annotation and diff for a tag.
 func ShowTag(name string) (string, error) {
-	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", name).Output()
+	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", "--end-of-options", name).Output()
 	if err != nil {
 		return "", fmt.Errorf("git show: %w", err)
 	}
@@ -443,7 +447,7 @@ func PushTag(name, remote string) error {
 	if strings.TrimSpace(remote) == "" {
 		remote = "origin"
 	}
-	out, err := exec.Command("git", "push", remote, name).CombinedOutput()
+	out, err := exec.Command("git", "push", "--end-of-options", remote, name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -455,7 +459,7 @@ func DeleteRemoteTag(name, remote string) error {
 	if strings.TrimSpace(remote) == "" {
 		remote = "origin"
 	}
-	out, err := exec.Command("git", "push", remote, "--delete", name).CombinedOutput()
+	out, err := exec.Command("git", "push", remote, "--delete", "--end-of-options", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
@@ -576,7 +580,7 @@ func GetRefs() ([]string, error) {
 // GetDiffBetween returns the colored diff between two refs (base..target).
 func GetDiffBetween(base, target string) (string, error) {
 	out, err := exec.Command("git", "diff", "--color=always", "--stat", "-p",
-		base+".."+target).Output()
+		"--end-of-options", base, target).Output()
 	if err != nil {
 		return "", fmt.Errorf("git diff: %w", err)
 	}
@@ -623,10 +627,10 @@ func GetReflog(n int) ([]ReflogEntry, error) {
 // CreateBranchAt creates a new branch pointing at the given ref/hash.
 // This is the non-destructive way to recover a commit found in the reflog.
 func CreateBranchAt(name, ref string) error {
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("branch name is required")
+	if err := ValidateRefName(name); err != nil {
+		return err
 	}
-	out, err := exec.Command("git", "branch", name, ref).CombinedOutput()
+	out, err := exec.Command("git", "branch", "--end-of-options", name, ref).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}
