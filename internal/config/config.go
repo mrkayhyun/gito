@@ -51,6 +51,7 @@ func Load() Config {
 }
 
 func loadFile(path string) (Config, bool) {
+	// #nosec G304 -- path is one of a fixed set of known config locations (./gito.json or ~/.config/gito/config.json), chosen by the loader, not attacker-controlled
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, false

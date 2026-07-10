@@ -61,13 +61,18 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chosen = MenuItems[m.cursor].Key
 			return m, tea.Quit
 		}
-		// number shortcuts 1-9 for quick selection
+		// number shortcuts 1-9 for quick selection, plus '0' for the 10th item.
 		if len(key.String()) == 1 {
 			c := key.String()[0]
 			if c >= '1' && c <= '9' {
 				idx := int(c - '1')
 				if idx < len(MenuItems) {
 					m.chosen = MenuItems[idx].Key
+					return m, tea.Quit
+				}
+			} else if c == '0' {
+				if len(MenuItems) >= 10 {
+					m.chosen = MenuItems[9].Key
 					return m, tea.Quit
 				}
 			}
@@ -92,7 +97,7 @@ func (m menuModel) View() string {
 	}
 
 	sb.WriteString("\n" + style.Dimmed.Render(
-		"↑/↓ j/k: 이동   1-9: 바로 선택   enter: 실행   q/esc: 종료",
+		"↑/↓ j/k: 이동   1-9,0: 바로 선택   enter: 실행   q/esc: 종료",
 	))
 	return sb.String()
 }
