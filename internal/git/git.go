@@ -459,7 +459,12 @@ func DeleteRemoteTag(name, remote string) error {
 	if strings.TrimSpace(remote) == "" {
 		remote = "origin"
 	}
-	out, err := exec.Command("git", "push", remote, "--delete", "--end-of-options", name).CombinedOutput()
+	// Keep '--delete' before '--end-of-options' so it is still parsed as an
+	// option, then guard BOTH the remote and the tag name as positionals. This
+	// mirrors PushTag's 'git push --end-of-options <remote> <name>' so neither
+	// operand can be interpreted as an option, even if remote selection ever
+	// becomes user-driven.
+	out, err := exec.Command("git", "push", "--delete", "--end-of-options", remote, name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
 	}

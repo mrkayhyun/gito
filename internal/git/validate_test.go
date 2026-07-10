@@ -1,6 +1,9 @@
 package git
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateRefName(t *testing.T) {
 	valid := []string{
@@ -42,8 +45,27 @@ func TestValidateRefName(t *testing.T) {
 	}
 }
 
-// TestRefGuardsRejectOptionInjection proves the validation guards prevent
-// option-injection names from creating or modifying any ref.
+// validatorErrText is the distinctive substring every ValidateRefName error
+// carries. git's own check-ref-format rejections use different wording ("is not
+// a valid branch/tag name"), so asserting on this text proves the rejection came
+// from ValidateRefName and not from git's built-in backstop.
+const validatorErrText = "invalid ref name"
+
+// TestRefGuardsRejectOptionInjection proves the ValidateRefName guards on the
+// four ref-creating command functions actually run.
+//
+// It routes two kinds of bad names through every command function:
+//   - dash-leading option-injection names ("-D", "--force", "-x", "-d"), and
+//   - ref-metacharacter names git would otherwise reject ("a..b", "foo.lock",
+//     ".hidden", "trail/").
+//
+// git independently rejects all of these once they land as positionals after
+// '--end-of-options', so a test that only checked for "an error" would still
+// pass even if the ValidateRefName calls were deleted (confirmed by the review).
+// To make the test meaningful we assert the error carries ValidateRefName's
+// distinctive text: if the guards are removed, git's own (differently-worded)
+// rejection takes over and these assertions fail. It also verifies no branch or
+// tag is created/modified on rejection.
 func TestRefGuardsRejectOptionInjection(t *testing.T) {
 	cleanup := setupRepo(t)
 	defer cleanup()
@@ -55,17 +77,36 @@ func TestRefGuardsRejectOptionInjection(t *testing.T) {
 	beforeBranches, _, _ := GetBranches()
 	beforeTags, _ := GetTags()
 
-	if err := CreateBranch("-D", true); err == nil {
-		t.Errorf("CreateBranch(\"-D\", true) = nil, want error")
+	// Each case funnels an untrusted name into the validated argument of one
+	// command function. Names that begin with '-' exercise the option-injection
+	// guard; the ref-metacharacter names exercise the ref-format rules. In every
+	// case the rejection must originate from ValidateRefName.
+	commands := []struct {
+		desc string
+		run  func(name string) error
+	}{
+		{"CreateBranch(checkout)", func(n string) error { return CreateBranch(n, true) }},
+		{"CreateBranch(no-checkout)", func(n string) error { return CreateBranch(n, false) }},
+		{"RenameBranch", func(n string) error { return RenameBranch("safe-branch", n) }},
+		{"CreateBranchAt", func(n string) error { return CreateBranchAt(n, "HEAD") }},
+		{"CreateTag", func(n string) error { return CreateTag(n, "", "") }},
 	}
-	if err := RenameBranch("safe-branch", "--force"); err == nil {
-		t.Errorf("RenameBranch(\"safe-branch\", \"--force\") = nil, want error")
-	}
-	if err := CreateBranchAt("-x", "HEAD"); err == nil {
-		t.Errorf("CreateBranchAt(\"-x\", \"HEAD\") = nil, want error")
-	}
-	if err := CreateTag("-d", "", ""); err == nil {
-		t.Errorf("CreateTag(\"-d\", \"\", \"\") = nil, want error")
+	// Dash names git rejects on its own PLUS ref-metacharacter names git's
+	// check-ref-format would reject with a *different* message than ours.
+	badNames := []string{"-D", "--force", "-x", "-d", "a..b", "foo.lock", ".hidden", "trail/"}
+
+	for _, cmd := range commands {
+		for _, name := range badNames {
+			err := cmd.run(name)
+			if err == nil {
+				t.Errorf("%s(%q) = nil, want error", cmd.desc, name)
+				continue
+			}
+			if !strings.Contains(err.Error(), validatorErrText) {
+				t.Errorf("%s(%q) error = %q, want it to contain %q (ValidateRefName guard missing?)",
+					cmd.desc, name, err.Error(), validatorErrText)
+			}
+		}
 	}
 
 	afterBranches, _, _ := GetBranches()
