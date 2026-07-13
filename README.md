@@ -15,21 +15,48 @@ Usage:
   gito remote    Remote list (fetch / ahead-behind status)
   gito diff      Compare two refs (branch/tag) and view the diff
   gito reflog    Browse reflog and recover commits into a new branch
+  gito undo      Safely undo the last git operation (preview + backup ref)
   gito blame     Pick a file and view line-by-line blame
 ```
 
 ---
+
+## 킬러 기능: gito undo (안전한 되돌리기)
+
+> "방금 `git reset --hard`로 커밋을 날렸는데 어떻게 되돌리지?" — 이 질문을 검색하는 대신 `gito undo` 한 줄이면 됩니다.
+
+git에서 실수를 되돌리는 방법은 상황마다 다릅니다. 커밋을 잘못했으면 `git reset`, 리셋을 잘못했으면
+`git reflog`로 해시를 찾아 다시 `git reset`, amend를 잘못했으면 또 다른 절차… 매번 "이번엔 어떤 명령이더라"를
+떠올려야 하고, 손이 떨리는 그 순간에 `--hard` 하나 잘못 쓰면 상황이 더 나빠집니다.
+
+`gito undo`는 이 모든 것을 **하나의 되돌리기 버튼**으로 바꿉니다.
+
+- **최근 작업을 사람이 읽는 언어로**: HEAD reflog를 해석해 `commit` / `amend` / `reset` / `rebase` / `merge` /
+  `cherry-pick` / `revert` / `pull` 처럼 **무슨 일이 있었는지**를 분류해 목록으로 보여줍니다. 해시를 눈으로 뒤질 필요가 없습니다.
+- **실행 전 미리보기**: 작업을 고르면 되돌렸을 때 **사라지는 커밋(−)** 과 **복원되는 커밋(+)** 을 색으로 미리 보여줍니다.
+  무엇이 바뀌는지 눈으로 확인한 뒤에만 진행합니다.
+- **자동 백업 ref**: 되돌리기 직전에 현재 HEAD를 가리키는 백업 ref(`refs/gito/undo-backup/…`)를 만듭니다.
+  되돌리기가 마음에 안 들면 그 되돌리기 자체를 다시 되돌릴 수 있습니다.
+- **안전한 기본값**: 추적 중인 변경사항이 있으면(더티 워킹 트리) 먼저 막아서 작업물을 잃지 않게 합니다.
+  추적되지 않는 파일은 건드리지 않으므로 그대로 보존됩니다.
+- **`reflog`와의 역할 분담**: `gito reflog`가 "옛 커밋을 새 브랜치로 **꺼내오는**" 비파괴적 복구라면,
+  `gito undo`는 "지금 브랜치를 직전 상태로 **되돌리는**" 작업입니다. 둘 다 백업 ref로 안전망을 겁니다.
+
+```bash
+gito undo        # 최근 작업 목록 → enter로 미리보기 → y로 되돌리기
+```
 
 ## 이 프로젝트를 만드는 목적
 
 일상적인 Git 작업 대부분은 **"기억해야 할 명령과 플래그"** 때문에 느려집니다.
 `git rebase -i`, `git reflog`, `git commit --amend`, `git push origin --delete <tag>` 같은
 명령들은 강력하지만, 매번 정확한 문법을 떠올려야 하고 실수하면 되돌리기 어렵습니다.
+이미 저지른 실수는 이제 `gito undo`(안전한 되돌리기)로 미리보기와 자동 백업 ref를 거쳐 한 번에 되돌릴 수 있습니다.
 
 gito의 목적은 이 마찰을 없애는 것입니다.
 
 - **탐색 가능한 인터페이스**: 명령을 외우는 대신 목록에서 고르고 키 힌트를 따라갑니다.
-- **안전한 기본값**: 파괴적인 작업(브랜치 삭제, 태그 원격 삭제 등)은 항상 확인 단계를 거칩니다.
+- **안전한 기본값**: 파괴적인 작업(브랜치 삭제, 태그 원격 삭제, 되돌리기 등)은 항상 확인 단계와 백업을 거칩니다.
 - **터미널 네이티브**: 별도 GUI 앱 없이, SSH 세션이나 원격 서버에서도 그대로 동작합니다.
 - **빠른 실행**: 단일 정적 바이너리로 배포되며 의존성이 없습니다.
 
@@ -76,6 +103,7 @@ main.go                 // 서브커맨드 라우팅 + help
 | `remote` | 원격 목록, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` 새로고침 |
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
+| `undo` | 최근 git 작업을 골라 직전 상태로 되돌리기(미리보기 + 자동 백업 ref, 더티 트리 보호) | `enter` 미리보기, `y` 되돌리기 |
 | `blame` | 파일 선택 후 라인별 blame | `enter` blame 보기 |
 
 ## 설치
@@ -117,6 +145,7 @@ gito status     # 변경 파일 스테이징/확인
 gito commit     # 대화형 커밋 작성
 gito log        # 히스토리 탐색
 gito diff       # 두 브랜치/태그 비교
+gito undo       # 방금 한 작업 되돌리기 (미리보기 후 실행)
 ```
 
 ### 런처 메뉴

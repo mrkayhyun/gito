@@ -72,6 +72,8 @@ func dispatch(cmd string) {
 		ui.RunDiff()
 	case "reflog":
 		ui.RunReflog()
+	case "undo":
+		ui.RunUndo()
 	case "blame":
 		ui.RunBlame()
 	}

@@ -28,6 +28,7 @@ var MenuItems = []MenuItem{
 	{"tag", "⌂", "태그 생성 / 삭제 / push"},
 	{"remote", "☁", "원격 목록 / fetch / ahead-behind"},
 	{"reflog", "↺", "reflog 탐색 + 커밋 복구"},
+	{"undo", "⎌", "최근 git 작업을 안전하게 되돌리기"},
 	{"blame", "◎", "파일 라인별 blame"},
 }
 
