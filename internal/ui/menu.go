@@ -29,6 +29,7 @@ var MenuItems = []MenuItem{
 	{"remote", "☁", "원격 목록 / fetch / ahead-behind"},
 	{"reflog", "↺", "reflog 탐색 + 커밋 복구"},
 	{"blame", "◎", "파일 라인별 blame"},
+	{"rebase", "⤳", "안전한 대화형 리베이스 (정리 / 재정렬)"},
 }
 
 type menuModel struct {

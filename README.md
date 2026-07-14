@@ -16,15 +16,30 @@ Usage:
   gito diff      Compare two refs (branch/tag) and view the diff
   gito reflog    Browse reflog and recover commits into a new branch
   gito blame     Pick a file and view line-by-line blame
+  gito rebase    Safe interactive rebase (reorder / squash / drop / reword)
 ```
 
 ---
+
+## 킬러 기능: gito rebase (안전한 대화형 리베이스)
+
+`git rebase -i`는 강력하지만 매번 rebase-todo 문법(`pick`/`squash`/`fixup`/`drop`/`reword`)을
+정확히 기억해야 하고, 편집기에서 실수하면 히스토리가 절반만 다시 쓰인 채로 남기 쉽습니다.
+`gito rebase`는 이 과정을 안전하고 탐색 가능하게 바꿉니다.
+
+- **문법을 외울 필요 없음**: 커밋 목록에서 키 힌트를 따라 `p`/`r`/`s`/`f`/`d`로 동작을 고르고, `K`/`J`로 순서를 바꿉니다.
+- **푸시 범위 인식**: upstream이 있으면 `@{upstream}` 이후의 아직 푸시하지 않은 커밋만 대상으로 삼아 공유된 히스토리를 건드리지 않습니다. upstream이 없으면 최근 로컬 커밋을 대상으로 하며(루트 커밋은 항상 보존), 확인 화면에서 이미 푸시된 커밋이 포함될 수 있음을 알려줍니다.
+- **실행 전 자동 백업 ref**: 히스토리를 다시 쓰기 직전에 원래 HEAD를 가리키는 백업 ref를 만들어 언제든 복구할 수 있습니다.
+- **실행 전 확인 단계**: 계획을 요약해 보여주고 `y`로 확인하기 전에는 아무것도 실행하지 않습니다.
+- **충돌 시 자동 복원**: 리베이스 도중 충돌이 나면 자동으로 abort 하여 저장소를 원래 상태로 되돌립니다. 히스토리가 절반만 다시 쓰인 채 남지 않습니다.
 
 ## 이 프로젝트를 만드는 목적
 
 일상적인 Git 작업 대부분은 **"기억해야 할 명령과 플래그"** 때문에 느려집니다.
 `git rebase -i`, `git reflog`, `git commit --amend`, `git push origin --delete <tag>` 같은
 명령들은 강력하지만, 매번 정확한 문법을 떠올려야 하고 실수하면 되돌리기 어렵습니다.
+특히 까다로운 `git rebase -i`는 이제 `gito rebase`(안전한 대화형 리베이스)로 문법 없이,
+자동 백업 ref와 실행 전 확인을 거쳐 처리할 수 있습니다.
 
 gito의 목적은 이 마찰을 없애는 것입니다.
 
@@ -77,6 +92,7 @@ main.go                 // 서브커맨드 라우팅 + help
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
 | `blame` | 파일 선택 후 라인별 blame | `enter` blame 보기 |
+| `rebase` | 안전한 대화형 리베이스: 커밋 재정렬 / squash / fixup / drop / reword, 실행 전 백업 ref 생성 | p/r/s/f/d, K/J 이동, y 실행 |
 
 ## 설치
 
