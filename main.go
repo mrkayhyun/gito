@@ -74,6 +74,8 @@ func dispatch(cmd string) {
 		ui.RunReflog()
 	case "blame":
 		ui.RunBlame()
+	case "rebase":
+		ui.RunRebase()
 	}
 }
 
