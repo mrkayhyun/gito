@@ -79,6 +79,8 @@ gito blame     Pick a file and view line-by-line blame
 | `diff` | Pick two refs (branch/tag) and compare | `enter` select (base → target) |
 | `reflog` | Browse reflog and recover commits (non-destructive: creates a new branch) | `b` branch from here |
 | `blame` | Pick a file and view line-by-line blame | `enter` view blame |
+| `rebase` | 안전한 대화형 리베이스: 커밋 재정렬 / squash / fixup / drop / reword, 실행 전 백업 ref 생성 | p/r/s/f/d, K/J 이동, y 실행 |
+>>>>>>> 2bd717d (feat: add gito rebase — safe interactive rebase TUI)
 
 ## Install
 

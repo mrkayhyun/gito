@@ -35,6 +35,7 @@ var en = map[string]string{
 	"menu.remote": "Remote list / fetch / ahead-behind",
 	"menu.reflog": "Browse reflog + recover commits",
 	"menu.blame":  "Line-by-line file blame",
+	"menu.rebase": "Safe interactive rebase (reorder / squash / drop)",
 	"menu.prompt": "Select a command to run",
 	"menu.hint":   "↑/↓ j/k: move   1-9,0: quick select   enter: run   q/esc: quit",
 
@@ -194,6 +195,7 @@ var ko = map[string]string{
 	"menu.remote": "원격 목록 / fetch / ahead-behind",
 	"menu.reflog": "reflog 탐색 + 커밋 복구",
 	"menu.blame":  "파일 라인별 blame",
+	"menu.rebase": "안전한 대화형 리베이스 (재정렬 / 스쿼시 / 삭제)",
 	"menu.prompt": "실행할 명령을 선택하세요",
 	"menu.hint":   "↑/↓ j/k: 이동   1-9,0: 바로 선택   enter: 실행   q/esc: 종료",
 
@@ -341,6 +343,7 @@ var ja = map[string]string{
 	"menu.remote": "リモート一覧 / fetch / ahead-behind",
 	"menu.reflog": "reflog 閲覧 + コミット復元",
 	"menu.blame":  "ファイルの行ごとの blame",
+	"menu.rebase": "安全なインタラクティブ rebase（並べ替え / squash / 削除）",
 	"menu.prompt": "実行するコマンドを選択してください",
 	"menu.hint":   "↑/↓ j/k: 移動   1-9,0: 直接選択   enter: 実行   q/esc: 終了",
 
@@ -488,6 +491,7 @@ var zh = map[string]string{
 	"menu.remote": "远程列表 / fetch / ahead-behind",
 	"menu.reflog": "浏览 reflog + 恢复提交",
 	"menu.blame":  "逐行文件 blame",
+	"menu.rebase": "安全的交互式 rebase（重排 / 压缩 / 删除）",
 	"menu.prompt": "请选择要运行的命令",
 	"menu.hint":   "↑/↓ j/k: 移动   1-9,0: 快速选择   enter: 运行   q/esc: 退出",
 
