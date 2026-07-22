@@ -34,6 +34,9 @@ var MenuItems = []MenuItem{
 	{"reflog", "↺", "menu.reflog"},
 	{"blame", "◎", "menu.blame"},
 	{"rebase", "⤳", "menu.rebase"},
+	{"cherry-pick", "⊕", "menu.cherrypick"},
+	{"undo", "↩", "menu.undo"},
+	{"worktree", "⊞", "menu.worktree"},
 }
 
 type menuModel struct {
