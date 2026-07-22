@@ -76,6 +76,12 @@ func dispatch(cmd string) {
 		ui.RunBlame()
 	case "rebase":
 		ui.RunRebase()
+	case "cherry-pick":
+		ui.RunCherryPick()
+	case "undo":
+		ui.RunUndo()
+	case "worktree":
+		ui.RunWorktree()
 	}
 }
 

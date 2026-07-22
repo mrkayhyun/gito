@@ -30,6 +30,9 @@ var MenuItems = []MenuItem{
 	{"reflog", "↺", "reflog 탐색 + 커밋 복구"},
 	{"blame", "◎", "파일 라인별 blame"},
 	{"rebase", "⤳", "안전한 대화형 리베이스 (정리 / 재정렬)"},
+	{"cherry-pick", "⊕", "다른 브랜치에서 커밋 가져오기 (충돌 시 자동 abort)"},
+	{"undo", "↩", "마지막 git 작업 안전하게 되돌리기"},
+	{"worktree", "⊞", "워크트리 목록 / 추가 / 삭제"},
 }
 
 type menuModel struct {

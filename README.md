@@ -6,17 +6,20 @@
 gito - TUI git helper
 
 Usage:
-  gito commit    Interactive commit wizard (5-step, config-driven types)
-  gito log       Scrollable log viewer  (↑/↓ navigate, enter: detail)
-  gito branch    Fuzzy branch switcher / create / rename / delete
-  gito status    Interactive stage / unstage / diff / discard
-  gito stash     Stash list  (pop / apply / show diff / drop)
-  gito tag       Tag manager (create / delete / push / show diff)
-  gito remote    Remote list (fetch / ahead-behind status)
-  gito diff      Compare two refs (branch/tag) and view the diff
-  gito reflog    Browse reflog and recover commits into a new branch
-  gito blame     Pick a file and view line-by-line blame
-  gito rebase    Safe interactive rebase (reorder / squash / drop / reword)
+  gito commit      Interactive commit wizard (5-step, config-driven types)
+  gito log         Scrollable log viewer  (↑/↓ navigate, enter: detail)
+  gito branch      Fuzzy branch switcher / create / rename / delete
+  gito status      Interactive stage / unstage / diff / discard
+  gito stash       Stash list  (pop / apply / show diff / drop)
+  gito tag         Tag manager (create / delete / push / show diff)
+  gito remote      Remote list (fetch / ahead-behind status)
+  gito diff        Compare two refs (branch/tag) and view the diff
+  gito reflog      Browse reflog and recover commits into a new branch
+  gito blame       Pick a file and view line-by-line blame
+  gito rebase      Safe interactive rebase (reorder / squash / drop / reword)
+  gito cherry-pick Interactive cherry-pick from another branch (auto-abort on conflict)
+  gito undo        Safely undo the last git operation (soft/hard)
+  gito worktree    Manage git worktrees (list / add / remove)
 ```
 
 ---
@@ -32,6 +35,34 @@ Usage:
 - **실행 전 자동 백업 ref**: 히스토리를 다시 쓰기 직전에 원래 HEAD를 가리키는 백업 ref를 만들어 언제든 복구할 수 있습니다.
 - **실행 전 확인 단계**: 계획을 요약해 보여주고 `y`로 확인하기 전에는 아무것도 실행하지 않습니다.
 - **충돌 시 자동 복원**: 리베이스 도중 충돌이 나면 자동으로 abort 하여 저장소를 원래 상태로 되돌립니다. 히스토리가 절반만 다시 쓰인 채 남지 않습니다.
+
+## v0.2.0 신규 기능
+
+### gito cherry-pick (대화형 체리픽)
+
+다른 브랜치의 커밋을 시각적으로 선택해 현재 브랜치에 가져옵니다.
+
+- **소스 브랜치 선택**: 로컬 브랜치 목록에서 가져올 대상을 고릅니다.
+- **멀티 커밋 선택**: `space`로 개별 커밋을 토글, `a`로 전체 토글.
+- **충돌 시 자동 abort**: cherry-pick 도중 충돌이 나면 자동으로 abort하여 저장소를 원래 상태로 되돌립니다.
+- **확인 단계**: 실행 전 선택한 커밋 목록을 보여주고 `y`로 확인.
+
+### gito undo (안전한 되돌리기)
+
+마지막 git 작업(commit, merge, rebase 등)을 한 키로 되돌립니다.
+
+- **soft 모드** (기본): `git reset --soft HEAD@{1}` — 변경 사항이 스테이징 영역에 보존됩니다.
+- **hard 모드**: `git reset --hard HEAD@{1}` — 작업 디렉토리까지 완전히 복원.
+- **되돌리기 전 미리보기**: 현재 HEAD와 이전 HEAD를 보여주고 확인 단계를 거칩니다.
+- **dirty 가드**: unstaged 변경이 있으면 실행을 거부합니다.
+
+### gito worktree (워크트리 관리)
+
+git worktree를 TUI로 관리합니다.
+
+- **목록 보기**: 모든 worktree의 경로, 브랜치, HEAD 해시를 한 눈에 확인.
+- **추가**: 기존 브랜치(`a`) 또는 새 브랜치(`n`)로 worktree 생성.
+- **삭제**: `D`로 선택한 worktree 제거 (main worktree는 보호).
 
 ## 이 프로젝트를 만드는 목적
 
@@ -93,6 +124,9 @@ main.go                 // 서브커맨드 라우팅 + help
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
 | `blame` | 파일 선택 후 라인별 blame | `enter` blame 보기 |
 | `rebase` | 안전한 대화형 리베이스: 커밋 재정렬 / squash / fixup / drop / reword, 실행 전 백업 ref 생성 | p/r/s/f/d, K/J 이동, y 실행 |
+| `cherry-pick` | 다른 브랜치에서 커밋 시각적 선택 후 cherry-pick, 충돌 시 자동 abort | space 선택, a 전체, y 실행 |
+| `undo` | 마지막 git 작업 안전하게 되돌리기 (soft/hard 선택) | s soft, h hard, y 확인 |
+| `worktree` | 워크트리 목록 / 추가(기존·새 브랜치) / 삭제 | a 추가, n 새 브랜치, D 삭제 |
 
 ## 설치
 
