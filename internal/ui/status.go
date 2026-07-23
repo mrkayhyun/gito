@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -96,14 +97,14 @@ func doStatusLoad() tea.Cmd {
 func doStatusDiff(e statusEntry) tea.Cmd {
 	return func() tea.Msg {
 		if e.section == secUntracked {
-			return statusDiffMsg{"(untracked — not yet staged)"}
+			return statusDiffMsg{i18n.T("status.untracked_note")}
 		}
 		content, err := git.GetFileDiff(e.file.Path, e.section == secStaged)
 		if err != nil {
 			return statusDiffMsg{"Error: " + err.Error()}
 		}
 		if content == "" {
-			return statusDiffMsg{"(no diff)"}
+			return statusDiffMsg{i18n.T("status.no_diff")}
 		}
 		return statusDiffMsg{content}
 	}
@@ -267,22 +268,20 @@ func (m statusModel) viewList() string {
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf(
 		"  staged:%d  unstaged:%d  untracked:%d", nStaged, nUnstaged, nUntracked,
 	)) + "\n")
-	sb.WriteString(style.Dimmed.Render(
-		"space: stage/unstage   a: stage all   d: diff   D: discard   q/esc: quit",
-	) + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("status.hint_list")) + "\n\n")
 
 	if m.confirmDiscard && m.cursor < len(m.entries) {
 		sb.WriteString(style.Failure.Render(
-			"변경사항을 버리시겠습니까? "+m.entries[m.cursor].file.Path,
+			i18n.Tf("status.discard_confirm", m.entries[m.cursor].file.Path),
 		) + "\n")
-		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
 	}
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
 	}
 
 	if len(m.entries) == 0 {
-		sb.WriteString(style.Dimmed.Render("  Nothing to commit, working tree clean") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("status.clean")) + "\n")
 		return sb.String()
 	}
 
@@ -340,10 +339,10 @@ func (m statusModel) viewDiff() string {
 		}
 		sb.WriteString(c.Render(e.file.Path))
 	}
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())

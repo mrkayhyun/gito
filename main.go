@@ -5,7 +5,9 @@ import (
 	"os"
 	"strings"
 
+	"gito/internal/config"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 	"gito/internal/ui"
 )
@@ -14,6 +16,13 @@ import (
 var version = "dev"
 
 func main() {
+	// Resolve the UI language before any output: first from the environment
+	// (auto-detection), then let an optional gito.json "lang" field override it.
+	i18n.Init()
+	if cfg := config.Load(); cfg.Lang != "" {
+		i18n.SetLang(i18n.Parse(cfg.Lang))
+	}
+
 	// No arguments → launch the interactive command picker.
 	if len(os.Args) < 2 {
 		cmd := ui.RunMenu()
@@ -42,14 +51,14 @@ func main() {
 // so it verifies that first and prints a friendly message otherwise.
 func dispatch(cmd string) {
 	if !isKnown(cmd) {
-		fmt.Fprintln(os.Stderr, style.Failure.Render("알 수 없는 명령: "+cmd)+"\n")
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("err.unknown_command")+cmd)+"\n")
 		printHelp()
 		os.Exit(1)
 	}
 
 	if !git.IsRepo() {
-		fmt.Fprintln(os.Stderr, style.Failure.Render("여기는 git 저장소가 아닙니다."))
-		fmt.Fprintln(os.Stderr, style.Dimmed.Render("git 저장소 안에서 실행하거나 'git init'으로 새로 만드세요."))
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("err.not_a_repo")))
+		fmt.Fprintln(os.Stderr, style.Dimmed.Render(i18n.T("err.not_a_repo_hint")))
 		os.Exit(1)
 	}
 
@@ -90,18 +99,18 @@ func printHelp() {
 	var sb strings.Builder
 	sb.WriteString("gito - TUI git helper\n\n")
 	sb.WriteString("Usage:\n")
-	sb.WriteString("  gito            대화형 런처 메뉴 실행\n")
-	sb.WriteString("  gito <command>  아래 명령 중 하나를 바로 실행\n\n")
+	sb.WriteString("  gito            " + i18n.T("help.run_menu") + "\n")
+	sb.WriteString("  gito <command>  " + i18n.T("help.run_command") + "\n\n")
 	sb.WriteString("Commands:\n")
 	for _, item := range ui.MenuItems {
-		sb.WriteString(fmt.Sprintf("  gito %-8s %s\n", item.Key, item.Desc))
+		sb.WriteString(fmt.Sprintf("  gito %-8s %s\n", item.Key, item.Desc()))
 	}
 	sb.WriteString("\nOther:\n")
-	sb.WriteString("  gito menu       런처 메뉴 열기\n")
-	sb.WriteString("  gito version    버전 출력\n")
-	sb.WriteString("  gito help       이 도움말 출력\n\n")
+	sb.WriteString("  gito menu       " + i18n.T("help.menu") + "\n")
+	sb.WriteString("  gito version    " + i18n.T("help.version") + "\n")
+	sb.WriteString("  gito help       " + i18n.T("help.help") + "\n\n")
 	sb.WriteString("Config (optional):\n")
 	sb.WriteString("  ./gito.json  or  ~/.config/gito/config.json\n")
-	sb.WriteString("  { \"commit_types\": [ {\"key\": \"feat\", \"label\": \"feat  새 기능\"} ] }\n")
+	sb.WriteString("  { \"lang\": \"en\", \"commit_types\": [ {\"key\": \"feat\", \"label\": \"feat  ...\"} ] }\n")
 	fmt.Print(sb.String())
 }

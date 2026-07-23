@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -42,7 +43,7 @@ func doBlame(path string) tea.Cmd {
 			return blameContentMsg{"Error: " + err.Error()}
 		}
 		if out == "" {
-			return blameContentMsg{"(empty file)"}
+			return blameContentMsg{i18n.T("blame.empty")}
 		}
 		return blameContentMsg{out}
 	}
@@ -170,11 +171,11 @@ func (m blameModel) View() string {
 func (m blameModel) viewPick() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito blame") + "\n\n")
-	sb.WriteString(style.Label.Render("Search: ") + m.filter.View() + "\n\n")
+	sb.WriteString(style.Label.Render(i18n.T("common.search")) + m.filter.View() + "\n\n")
 
 	filtered := m.filtered()
 	if len(filtered) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No files found") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("blame.none")) + "\n")
 	} else {
 		vis := m.visibleRows()
 		end := m.offset + vis
@@ -190,16 +191,16 @@ func (m blameModel) viewPick() string {
 			}
 		}
 	}
-	sb.WriteString("\n" + style.Dimmed.Render("↑/↓: 이동   enter: blame 보기   esc: 종료"))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("blame.hint_pick")))
 	return sb.String()
 }
 
 func (m blameModel) viewBlame() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito blame  ›  ") + style.Label.Render(m.selected) + "\n")
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())
@@ -213,11 +214,11 @@ func RunBlame() {
 		os.Exit(1)
 	}
 	if len(files) == 0 {
-		fmt.Println("No tracked files.")
+		fmt.Println(i18n.T("blame.no_tracked"))
 		return
 	}
 	filter := textinput.New()
-	filter.Placeholder = "filter files..."
+	filter.Placeholder = i18n.T("blame.ph_filter")
 	filter.CharLimit = 200
 	filter.Focus()
 

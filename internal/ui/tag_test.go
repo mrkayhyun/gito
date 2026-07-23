@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gito/internal/git"
+	"gito/internal/i18n"
 )
 
 // newTagListModel builds a tagModel sitting on the list pane with a hand-built
@@ -143,8 +144,10 @@ func TestTagLocalDeleteCancelOnNonY(t *testing.T) {
 }
 
 func TestTagConfirmPromptRendering(t *testing.T) {
-	const remotePrompt = "원격(origin)에서 태그를 삭제하시겠습니까?"
-	const localPrompt = "태그를 삭제하시겠습니까?"
+	// Derive the expected prompt text (minus the %s tag-name placeholder) from
+	// the active i18n catalog so this test is locale-independent.
+	remotePrompt := strings.TrimSpace(strings.SplitN(i18n.T("tag.remote_delete_confirm"), "%s", 2)[0])
+	localPrompt := strings.TrimSpace(strings.SplitN(i18n.T("tag.delete_confirm"), "%s", 2)[0])
 
 	// No flag set: neither prompt appears.
 	m := newTagListModel()

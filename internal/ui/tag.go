@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -76,7 +77,7 @@ func doTagShow(name string) tea.Cmd {
 			return tagShowMsg{"Error: " + err.Error()}
 		}
 		if content == "" {
-			return tagShowMsg{"(empty)"}
+			return tagShowMsg{i18n.T("common.empty")}
 		}
 		return tagShowMsg{content}
 	}
@@ -170,14 +171,14 @@ func (m tagModel) updateCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		name := strings.TrimSpace(m.nameInput.Value())
 		if name == "" {
-			m.errMsg = "tag name is required"
+			m.errMsg = i18n.T("tag.err_name_required")
 			return m, nil
 		}
 		if err := git.CreateTag(name, m.msgInput.Value(), ""); err != nil {
 			m.errMsg = err.Error()
 			return m, nil
 		}
-		m.successMsg = "Created tag " + name
+		m.successMsg = i18n.T("tag.created") + name
 		m.pane = tagPaneList
 		m.nameInput.Blur()
 		m.msgInput.Blur()
@@ -214,7 +215,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.errMsg = err.Error()
 					return m, nil
 				}
-				m.successMsg = "Deleted tag " + name
+				m.successMsg = i18n.T("tag.deleted") + name
 			}
 			return m, doTagLoad()
 		default:
@@ -234,7 +235,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.errMsg = err.Error()
 					return m, nil
 				}
-				m.successMsg = "Deleted " + name + " on origin"
+				m.successMsg = i18n.Tf("tag.deleted_origin", name)
 			}
 			return m, doTagLoad()
 		default:
@@ -287,7 +288,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.errMsg = err.Error()
 				return m, nil
 			}
-			m.successMsg = "Pushed " + name + " to origin"
+			m.successMsg = i18n.Tf("tag.pushed", name)
 		}
 	case "P": // delete tag on origin
 		if m.cursor < len(m.tags) {
@@ -321,21 +322,19 @@ func (m tagModel) viewList() string {
 
 	sb.WriteString(style.Title.Render("gito tag"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d tags", len(m.tags))) + "\n")
-	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   enter/d: 상세   c: 생성   p: push   P: 원격삭제   D: 삭제   q/esc: 종료",
-	) + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("tag.hint_list")) + "\n\n")
 
 	if m.confirmDelete && m.cursor < len(m.tags) {
 		sb.WriteString(style.Failure.Render(
-			"태그를 삭제하시겠습니까? "+m.tags[m.cursor].Name,
+			i18n.Tf("tag.delete_confirm", m.tags[m.cursor].Name),
 		) + "\n")
-		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
 	}
 	if m.confirmRemoteDelete && m.cursor < len(m.tags) {
 		sb.WriteString(style.Failure.Render(
-			"원격(origin)에서 태그를 삭제하시겠습니까? "+m.tags[m.cursor].Name,
+			i18n.Tf("tag.remote_delete_confirm", m.tags[m.cursor].Name),
 		) + "\n")
-		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
 	}
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
@@ -345,7 +344,7 @@ func (m tagModel) viewList() string {
 	}
 
 	if len(m.tags) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No tags. Press 'c' to create one on HEAD.") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("tag.none")) + "\n")
 		return sb.String()
 	}
 
@@ -377,10 +376,10 @@ func (m tagModel) viewShow() string {
 		t := m.tags[m.cursor]
 		sb.WriteString(tagNameStyle.Render(t.Name) + "  " + tagMsgStyle.Render(t.Subject))
 	}
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())
@@ -390,7 +389,7 @@ func (m tagModel) viewShow() string {
 func (m tagModel) viewCreate() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito tag  ›  create") + "\n\n")
-	sb.WriteString(style.Dimmed.Render("HEAD 커밋에 태그를 생성합니다.") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("tag.create_on_head")) + "\n\n")
 
 	nameLabel := style.Label.Render("Name:    ")
 	msgLabel := style.Label.Render("Message: ")
@@ -401,13 +400,13 @@ func (m tagModel) viewCreate() string {
 	}
 	sb.WriteString(nameLabel + " " + m.nameInput.View() + "\n\n")
 	sb.WriteString(msgLabel + " " + m.msgInput.View() + "\n\n")
-	sb.WriteString(style.Dimmed.Render("메시지가 비어있으면 lightweight 태그, 있으면 annotated 태그로 생성됩니다.") + "\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("tag.create_note")) + "\n")
 
 	if m.errMsg != "" {
 		sb.WriteString("\n" + style.Failure.Render("! "+m.errMsg) + "\n")
 	}
 
-	sb.WriteString("\n" + style.Dimmed.Render("tab: 필드 이동   enter: 다음/생성   esc: 취소"))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("tag.hint_create")))
 	return sb.String()
 }
 
@@ -419,7 +418,7 @@ func RunTag() {
 	name.CharLimit = 100
 
 	msg := textinput.New()
-	msg.Placeholder = "optional annotation message"
+	msg.Placeholder = i18n.T("tag.ph_msg")
 	msg.CharLimit = 200
 
 	m := tagModel{

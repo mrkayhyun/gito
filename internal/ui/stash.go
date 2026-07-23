@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -66,7 +67,7 @@ func doStashShow(ref string) tea.Cmd {
 			return stashShowMsg{"Error: " + err.Error()}
 		}
 		if content == "" {
-			return stashShowMsg{"(empty stash)"}
+			return stashShowMsg{i18n.T("stash.empty_show")}
 		}
 		return stashShowMsg{content}
 	}
@@ -144,7 +145,7 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.errMsg = err.Error()
 					return m, nil
 				}
-				m.successMsg = "Dropped " + m.stashes[m.cursor].Ref
+				m.successMsg = i18n.T("stash.dropped") + m.stashes[m.cursor].Ref
 			}
 			return m, doStashLoad()
 		default:
@@ -174,7 +175,7 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.errMsg = err.Error()
 				return m, nil
 			}
-			m.successMsg = "Popped " + ref
+			m.successMsg = i18n.T("stash.popped") + ref
 			return m, doStashLoad()
 		}
 	case "a": // apply (keep stash)
@@ -184,7 +185,7 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.errMsg = err.Error()
 				return m, nil
 			}
-			m.successMsg = "Applied " + ref
+			m.successMsg = i18n.T("stash.applied") + ref
 		}
 	case "d": // show diff
 		if m.cursor < len(m.stashes) {
@@ -214,15 +215,13 @@ func (m stashModel) viewList() string {
 
 	sb.WriteString(style.Title.Render("gito stash"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d entries", len(m.stashes))) + "\n")
-	sb.WriteString(style.Dimmed.Render(
-		"enter/p: pop   a: apply   d: show diff   D: drop   q/esc: quit",
-	) + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("stash.hint_list")) + "\n\n")
 
 	if m.confirmDrop && m.cursor < len(m.stashes) {
 		sb.WriteString(style.Failure.Render(
-			"삭제하시겠습니까? "+m.stashes[m.cursor].Ref,
+			i18n.Tf("stash.drop_confirm", m.stashes[m.cursor].Ref),
 		) + "\n")
-		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
 	}
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
@@ -232,7 +231,7 @@ func (m stashModel) viewList() string {
 	}
 
 	if len(m.stashes) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No stashes") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("stash.none")) + "\n")
 		return sb.String()
 	}
 
@@ -261,10 +260,10 @@ func (m stashModel) viewShow() string {
 		s := m.stashes[m.cursor]
 		sb.WriteString(stashRefStyle.Render(s.Ref) + "  " + stashMsgStyle.Render(s.Subject))
 	}
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())

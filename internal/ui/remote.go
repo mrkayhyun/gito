@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -177,25 +178,23 @@ func (m remoteModel) viewList() string {
 
 	sb.WriteString(style.Title.Render("gito remote"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d remotes", len(m.remotes))) + "\n")
-	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   f: fetch   F: fetch all   r: 새로고침   q/esc: 종료",
-	) + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("remote.hint_list")) + "\n\n")
 
 	// upstream ahead/behind summary for current branch
 	if m.hasUpstream {
-		sb.WriteString(style.Label.Render("upstream 상태: "))
+		sb.WriteString(style.Label.Render(i18n.T("remote.upstream_status")))
 		sb.WriteString(aheadStyle.Render(fmt.Sprintf("↑%d", m.ahead)) + " ")
 		sb.WriteString(behindStyle.Render(fmt.Sprintf("↓%d", m.behind)))
 		if m.ahead == 0 && m.behind == 0 {
-			sb.WriteString(style.Success.Render("  (up to date)"))
+			sb.WriteString(style.Success.Render(i18n.T("remote.up_to_date")))
 		}
 		sb.WriteString("\n\n")
 	} else {
-		sb.WriteString(style.Dimmed.Render("현재 브랜치에 설정된 upstream이 없습니다.") + "\n\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("remote.no_upstream")) + "\n\n")
 	}
 
 	if m.loading {
-		sb.WriteString(style.Label.Render("fetching...") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("remote.fetching")) + "\n\n")
 	}
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
@@ -205,7 +204,7 @@ func (m remoteModel) viewList() string {
 	}
 
 	if len(m.remotes) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No remotes configured") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("remote.none")) + "\n")
 		return sb.String()
 	}
 
@@ -223,9 +222,9 @@ func (m remoteModel) viewList() string {
 func (m remoteModel) viewOutput() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito remote  ›  fetch") + "\n")
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())

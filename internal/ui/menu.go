@@ -6,29 +6,33 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
 // MenuItem describes one selectable command in the launcher.
 type MenuItem struct {
-	Key  string // subcommand name, e.g. "commit"
-	Icon string
-	Desc string
+	Key     string // subcommand name, e.g. "commit"
+	Icon    string
+	descKey string // i18n message key for the localized description
 }
+
+// Desc returns the command's description in the active UI language.
+func (m MenuItem) Desc() string { return i18n.T(m.descKey) }
 
 // MenuItems is the canonical list of commands shown in the launcher and help.
 // main.go reuses this for its dispatch table and text help so they never drift.
 var MenuItems = []MenuItem{
-	{"status", "◍", "변경 파일 스테이징 / diff / discard"},
-	{"commit", "✎", "대화형 커밋 마법사 (5단계)"},
-	{"log", "≡", "커밋 로그 탐색 + 상세 diff"},
-	{"branch", "⑂", "브랜치 전환 / 생성 / 이름변경 / 삭제"},
-	{"diff", "⇄", "두 ref(브랜치·태그) 비교"},
-	{"stash", "⊟", "스태시 pop / apply / diff / drop"},
-	{"tag", "⌂", "태그 생성 / 삭제 / push"},
-	{"remote", "☁", "원격 목록 / fetch / ahead-behind"},
-	{"reflog", "↺", "reflog 탐색 + 커밋 복구"},
-	{"blame", "◎", "파일 라인별 blame"},
+	{"status", "◍", "menu.status"},
+	{"commit", "✎", "menu.commit"},
+	{"log", "≡", "menu.log"},
+	{"branch", "⑂", "menu.branch"},
+	{"diff", "⇄", "menu.diff"},
+	{"stash", "⊟", "menu.stash"},
+	{"tag", "⌂", "menu.tag"},
+	{"remote", "☁", "menu.remote"},
+	{"reflog", "↺", "menu.reflog"},
+	{"blame", "◎", "menu.blame"},
 }
 
 type menuModel struct {
@@ -84,11 +88,11 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m menuModel) View() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito") + style.Dimmed.Render("  TUI git helper") + "\n")
-	sb.WriteString(style.Dimmed.Render("실행할 명령을 선택하세요") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("menu.prompt")) + "\n\n")
 
 	for i, item := range MenuItems {
 		num := style.Dimmed.Render(fmt.Sprintf("%d", i+1))
-		line := fmt.Sprintf("%s %-7s %s", item.Icon, item.Key, item.Desc)
+		line := fmt.Sprintf("%s %-7s %s", item.Icon, item.Key, item.Desc())
 		if i == m.cursor {
 			sb.WriteString(num + " " + style.Selected.Render("▶ "+line) + "\n")
 		} else {
@@ -96,9 +100,7 @@ func (m menuModel) View() string {
 		}
 	}
 
-	sb.WriteString("\n" + style.Dimmed.Render(
-		"↑/↓ j/k: 이동   1-9,0: 바로 선택   enter: 실행   q/esc: 종료",
-	))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("menu.hint")))
 	return sb.String()
 }
 

@@ -5,17 +5,21 @@
 // Example gito.json:
 //
 //	{
+//	  "lang": "en",
 //	  "commit_types": [
-//	    {"key": "feat",  "label": "feat   새 기능"},
-//	    {"key": "fix",   "label": "fix    버그 수정"}
+//	    {"key": "feat",  "label": "feat   New feature"},
+//	    {"key": "fix",   "label": "fix    Bug fix"}
 //	  ]
 //	}
 package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+
+	"gito/internal/i18n"
 )
 
 type CommitType struct {
@@ -24,30 +28,51 @@ type CommitType struct {
 }
 
 type Config struct {
+	// Lang optionally overrides the auto-detected UI language ("en", "ko",
+	// "ja", "zh"). When empty, the environment-detected language is used.
+	Lang        string       `json:"lang"`
 	CommitTypes []CommitType `json:"commit_types"`
 }
 
-var defaults = []CommitType{
-	{"feat", "feat      새로운 기능"},
-	{"fix", "fix       버그 수정"},
-	{"docs", "docs      문서 변경"},
-	{"style", "style     코드 스타일"},
-	{"refactor", "refactor  리팩토링"},
-	{"test", "test      테스트"},
-	{"chore", "chore     빌드/설정"},
+// defaultCommitTypes builds the Conventional Commits default types with
+// descriptions localized to the active i18n language. It is a function (not a
+// package var) so labels reflect the language chosen at load time.
+func defaultCommitTypes() []CommitType {
+	keys := []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
+	types := make([]CommitType, len(keys))
+	for i, k := range keys {
+		types[i] = CommitType{
+			Key:   k,
+			Label: fmt.Sprintf("%-9s %s", k, i18n.T("committype."+k)),
+		}
+	}
+	return types
 }
 
 func Load() Config {
 	if cfg, ok := loadFile("gito.json"); ok {
-		return cfg
+		return finalize(cfg)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		path := filepath.Join(home, ".config", "gito", "config.json")
 		if cfg, ok := loadFile(path); ok {
-			return cfg
+			return finalize(cfg)
 		}
 	}
-	return Config{CommitTypes: defaults}
+	return finalize(Config{})
+}
+
+// finalize applies a config-specified language override and fills in default
+// commit types when none were provided. Applying the language before building
+// defaults ensures the default labels are localized correctly.
+func finalize(cfg Config) Config {
+	if cfg.Lang != "" {
+		i18n.SetLang(i18n.Parse(cfg.Lang))
+	}
+	if len(cfg.CommitTypes) == 0 {
+		cfg.CommitTypes = defaultCommitTypes()
+	}
+	return cfg
 }
 
 func loadFile(path string) (Config, bool) {
@@ -57,7 +82,7 @@ func loadFile(path string) (Config, bool) {
 		return Config{}, false
 	}
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil || len(cfg.CommitTypes) == 0 {
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, false
 	}
 	return cfg, true

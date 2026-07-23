@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -188,7 +189,7 @@ func (m logModel) viewList() string {
 	sb.WriteString(style.Title.Render("gito log"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
 	sb.WriteString("\n")
-	sb.WriteString(style.Dimmed.Render("↑/↓ j/k: 이동   g/G: 처음/끝   enter: 상세   q/esc: 종료"))
+	sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_list")))
 	sb.WriteString("\n\n")
 
 	vis := m.visibleRows()
@@ -237,10 +238,10 @@ func (m logModel) viewDetail() string {
 		dateStyle.Render(c.Date) + "  " +
 		msgStyle.Render(c.Subject) + "  " +
 		authorStyle.Render("("+c.Author+")") + "\n" +
-		style.Dimmed.Render("↑/↓ j/k: 스크롤   PgUp/PgDn: 페이지   q/esc: 목록으로") + "\n\n"
+		style.Dimmed.Render(i18n.T("log.hint_detail")) + "\n\n"
 
 	if !m.vpReady {
-		return header + style.Dimmed.Render("  Loading...")
+		return header + style.Dimmed.Render("  " + i18n.T("common.loading"))
 	}
 	return header + m.vp.View()
 }
@@ -254,7 +255,7 @@ func RunLog() {
 		os.Exit(1)
 	}
 	if len(entries) == 0 {
-		fmt.Println("No commits yet.")
+		fmt.Println(i18n.T("log.none"))
 		return
 	}
 

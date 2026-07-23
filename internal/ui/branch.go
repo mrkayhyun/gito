@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -36,7 +37,7 @@ type branchModel struct {
 
 func newBranchModel(branches []string, current string) branchModel {
 	filter := textinput.New()
-	filter.Placeholder = "filter branches..."
+	filter.Placeholder = i18n.T("branch.ph_filter")
 	filter.CharLimit = 100
 	filter.Focus()
 
@@ -98,7 +99,7 @@ func (m branchModel) updateInput(msg tea.KeyMsg, rename bool) (tea.Model, tea.Cm
 	case "enter":
 		name := strings.TrimSpace(m.input.Value())
 		if name == "" {
-			m.err = fmt.Errorf("branch name is required")
+			m.err = fmt.Errorf("%s", i18n.T("branch.err_name_required"))
 			return m, nil
 		}
 		var err error
@@ -115,9 +116,9 @@ func (m branchModel) updateInput(msg tea.KeyMsg, rename bool) (tea.Model, tea.Cm
 			return m, nil
 		}
 		if rename {
-			m.msg = "Renamed to " + name
+			m.msg = i18n.T("branch.renamed_to") + name
 		} else {
-			m.msg = "Created & switched to " + name
+			m.msg = i18n.T("branch.created_switched") + name
 		}
 		m.mode = branchModeList
 		m.input.Blur()
@@ -146,7 +147,7 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err := git.DeleteBranch(target, m.confirmForce); err != nil {
 					m.err = err
 				} else {
-					m.msg = "Deleted " + target
+					m.msg = i18n.T("branch.deleted") + target
 					branches, current, gerr := git.GetBranches()
 					if gerr == nil {
 						m.branches, m.current = branches, current
@@ -196,7 +197,7 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.msg = ""
 		m.input.SetValue("")
-		m.input.Placeholder = "new branch name"
+		m.input.Placeholder = i18n.T("branch.ph_new")
 		return m, m.input.Focus()
 	case "ctrl+r": // rename selected
 		if m.cursor < len(filtered) {
@@ -204,7 +205,7 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.msg = ""
 			m.input.SetValue(filtered[m.cursor])
-			m.input.Placeholder = "new name"
+			m.input.Placeholder = i18n.T("branch.ph_newname")
 			return m, m.input.Focus()
 		}
 		return m, nil
@@ -212,11 +213,11 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(filtered) {
 			target := filtered[m.cursor]
 			if target == m.current {
-				m.err = fmt.Errorf("cannot delete the current branch")
+				m.err = fmt.Errorf("%s", i18n.T("branch.err_cur"))
 				return m, nil
 			}
 			if git.IsRemoteBranch(target) {
-				m.err = fmt.Errorf("cannot delete a remote-tracking branch here")
+				m.err = fmt.Errorf("%s", i18n.T("branch.err_remote"))
 				return m, nil
 			}
 			m.err = nil
@@ -228,11 +229,11 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(filtered) {
 			target := filtered[m.cursor]
 			if target == m.current {
-				m.err = fmt.Errorf("cannot delete the current branch")
+				m.err = fmt.Errorf("%s", i18n.T("branch.err_cur"))
 				return m, nil
 			}
 			if git.IsRemoteBranch(target) {
-				m.err = fmt.Errorf("cannot delete a remote-tracking branch here")
+				m.err = fmt.Errorf("%s", i18n.T("branch.err_remote"))
 				return m, nil
 			}
 			m.err = nil
@@ -261,10 +262,10 @@ func (m branchModel) View() string {
 func (m branchModel) viewInput() string {
 	var sb strings.Builder
 	title := "gito branch  ›  create"
-	label := "새 브랜치 이름 (생성 후 전환):"
+	label := i18n.T("branch.new_name")
 	if m.mode == branchModeRename {
 		title = "gito branch  ›  rename"
-		label = "새 이름으로 변경:"
+		label = i18n.T("branch.rename_to")
 	}
 	sb.WriteString(style.Title.Render(title) + "\n\n")
 	sb.WriteString(style.Label.Render(label) + "\n\n")
@@ -272,7 +273,7 @@ func (m branchModel) viewInput() string {
 	if m.err != nil {
 		sb.WriteString("\n" + style.Failure.Render("! "+m.err.Error()) + "\n")
 	}
-	sb.WriteString("\n" + style.Dimmed.Render("enter: 확인   esc: 취소"))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("branch.hint_confirm")))
 	return sb.String()
 }
 
@@ -280,19 +281,19 @@ func (m branchModel) viewList() string {
 	var sb strings.Builder
 
 	sb.WriteString(style.Title.Render("gito branch") + "\n\n")
-	sb.WriteString(style.Label.Render("Search: ") + m.filter.View() + "\n\n")
+	sb.WriteString(style.Label.Render(i18n.T("common.search")) + m.filter.View() + "\n\n")
 
 	filtered := m.filteredBranches()
 
 	if m.confirm && m.cursor < len(filtered) {
-		verb := "삭제"
+		key := "branch.delete_confirm"
 		if m.confirmForce {
-			verb = "강제 삭제(병합 안 된 커밋 포함)"
+			key = "branch.force_delete_confirm"
 		}
 		sb.WriteString(style.Failure.Render(
-			verb+"하시겠습니까? "+filtered[m.cursor],
+			i18n.Tf(key, filtered[m.cursor]),
 		) + "\n")
-		sb.WriteString(style.Label.Render("y: 확인   다른 키: 취소") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
 	}
 	if m.err != nil {
 		sb.WriteString(style.Failure.Render("! "+m.err.Error()) + "\n\n")
@@ -302,7 +303,7 @@ func (m branchModel) viewList() string {
 	}
 
 	if len(filtered) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No branches found") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("branch.no_branches")) + "\n")
 	} else {
 		for i, b := range filtered {
 			prefix := "  "
@@ -319,9 +320,7 @@ func (m branchModel) viewList() string {
 		}
 	}
 
-	sb.WriteString("\n" + style.Dimmed.Render(
-		"↑/↓: 이동   enter: 전환   ^b: 생성   ^r: 이름변경   ^d: 삭제   ^x: 강제삭제   esc: 종료",
-	))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("branch.hint_list")))
 	return sb.String()
 }
 
@@ -342,10 +341,10 @@ func RunBranch() {
 
 	final := result.(branchModel)
 	if final.err != nil && final.done {
-		fmt.Fprintln(os.Stderr, style.Failure.Render("Switch failed: "+final.err.Error()))
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("branch.switch_failed")+final.err.Error()))
 		os.Exit(1)
 	}
 	if final.done {
-		fmt.Println(style.Success.Render("✓ Switched to: " + final.switched))
+		fmt.Println(style.Success.Render("✓ " + i18n.T("branch.switched") + final.switched))
 	}
 }

@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"gito/internal/config"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -42,7 +43,7 @@ type commitModel struct {
 	cursor     int
 	typeIdx    int
 	typeKeys   []string // e.g. ["feat","fix",...]
-	typeLabels []string // e.g. ["feat   새 기능",...]
+	typeLabels []string // e.g. ["feat   New feature",...]
 	scope      textinput.Model
 	subject    textinput.Model
 	body       textinput.Model
@@ -53,15 +54,15 @@ type commitModel struct {
 
 func newCommitModel() commitModel {
 	scope := textinput.New()
-	scope.Placeholder = "optional scope (e.g. auth, api)"
+	scope.Placeholder = i18n.T("commit.ph_scope")
 	scope.CharLimit = 50
 
 	subject := textinput.New()
-	subject.Placeholder = "short description"
+	subject.Placeholder = i18n.T("commit.ph_subject")
 	subject.CharLimit = 72
 
 	body := textinput.New()
-	body.Placeholder = "optional longer description"
+	body.Placeholder = i18n.T("commit.ph_body")
 	body.CharLimit = 500
 
 	cfg := config.Load()
@@ -218,7 +219,13 @@ func (m commitModel) View() string {
 
 	sb.WriteString(style.Title.Render("gito commit") + "\n\n")
 
-	stepNames := []string{"Type", "Scope", "Subject", "Body", "Confirm"}
+	stepNames := []string{
+		i18n.T("commit.step_type"),
+		i18n.T("commit.step_scope"),
+		i18n.T("commit.step_subject"),
+		i18n.T("commit.step_body"),
+		i18n.T("commit.step_confirm"),
+	}
 	var indicators []string
 	for i, s := range stepNames {
 		si := commitStep(i)
@@ -234,7 +241,7 @@ func (m commitModel) View() string {
 
 	switch m.step {
 	case stepType:
-		sb.WriteString(style.Label.Render("커밋 타입을 선택하세요:") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("commit.select_type")) + "\n\n")
 		for i, t := range m.typeLabels {
 			if i == m.cursor {
 				sb.WriteString(style.Selected.Render("▶ "+t) + "\n")
@@ -242,16 +249,16 @@ func (m commitModel) View() string {
 				sb.WriteString(style.Normal.Render("  "+t) + "\n")
 			}
 		}
-		sb.WriteString("\n" + style.Dimmed.Render("↑/↓: 이동   enter: 선택   q: 종료"))
+		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_type")))
 
 	case stepScope:
-		sb.WriteString(style.Label.Render("스코프 입력 (선택사항):") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("commit.enter_scope")) + "\n\n")
 		sb.WriteString(style.Normal.Render(m.typeKeys[m.typeIdx] + "  "))
 		sb.WriteString(m.scope.View() + "\n")
-		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
+		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_next")))
 
 	case stepSubject:
-		sb.WriteString(style.Label.Render("커밋 메시지 입력:") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("commit.enter_subject")) + "\n\n")
 		prefix := m.typeKeys[m.typeIdx]
 		if m.scope.Value() != "" {
 			prefix += "(" + m.scope.Value() + ")"
@@ -260,28 +267,28 @@ func (m commitModel) View() string {
 		sb.WriteString(m.subject.View() + "\n")
 		label, warn := subjectLenHint(utf8.RuneCountInString(m.subject.Value()))
 		if warn {
-			sb.WriteString(style.Failure.Render(label+" (권장 "+fmt.Sprintf("%d", subjectRecommendedLen)+"자 초과)") + "\n")
+			sb.WriteString(style.Failure.Render(label+" "+i18n.Tf("commit.over_limit", subjectRecommendedLen)) + "\n")
 		} else {
 			sb.WriteString(style.Dimmed.Render(label) + "\n")
 		}
-		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
+		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_next")))
 
 	case stepBody:
-		sb.WriteString(style.Label.Render("본문 입력 (선택사항):") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("commit.enter_body")) + "\n\n")
 		sb.WriteString(m.body.View() + "\n")
-		sb.WriteString("\n" + style.Dimmed.Render("enter: 다음   esc: 이전   ctrl+c: 종료"))
+		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_next")))
 
 	case stepConfirm:
-		sb.WriteString(style.Label.Render("커밋 메시지 확인:") + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.T("commit.confirm_msg")) + "\n\n")
 		sb.WriteString(style.Border.Render(m.buildMessage()) + "\n\n")
-		sb.WriteString(style.Label.Render("커밋하시겠습니까?  "))
-		sb.WriteString(style.Selected.Render(" y ") + style.Normal.Render(" yes   "))
-		sb.WriteString(style.Selected.Render(" n ") + style.Normal.Render(" no   "))
-		sb.WriteString(style.Selected.Render(" a ") + style.Normal.Render(" amend   "))
-		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" edit\n"))
-		sb.WriteString("\n" + style.Dimmed.Render("esc: 이전 (본문)"))
+		sb.WriteString(style.Label.Render(i18n.T("commit.commit_q")))
+		sb.WriteString(style.Selected.Render(" y ") + style.Normal.Render(" "+i18n.T("commit.yes")+"   "))
+		sb.WriteString(style.Selected.Render(" n ") + style.Normal.Render(" "+i18n.T("commit.no")+"   "))
+		sb.WriteString(style.Selected.Render(" a ") + style.Normal.Render(" "+i18n.T("commit.amend")+"   "))
+		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" "+i18n.T("commit.edit")+"\n"))
+		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_back_body")))
 		if last := git.GetLastCommitSubject(); last != "" {
-			sb.WriteString("\n" + style.Dimmed.Render("a(amend) 시 대체될 직전 커밋: "+last) + "\n")
+			sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.amend_prev")+last) + "\n")
 		}
 	}
 
@@ -295,7 +302,7 @@ func RunCommit() {
 		os.Exit(1)
 	}
 	if status == "" {
-		fmt.Println("Nothing to commit. Use 'git add' to stage changes.")
+		fmt.Println(i18n.T("commit.nothing"))
 		return
 	}
 
@@ -309,14 +316,14 @@ func RunCommit() {
 
 	final := result.(commitModel)
 	if final.err != nil {
-		fmt.Fprintln(os.Stderr, style.Failure.Render("Commit failed: "+final.err.Error()))
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("commit.failed")+final.err.Error()))
 		os.Exit(1)
 	}
 	if final.done {
 		if final.amend {
-			fmt.Println(style.Success.Render("✓ Amended previous commit"))
+			fmt.Println(style.Success.Render("✓ " + i18n.T("commit.amended")))
 		} else {
-			fmt.Println(style.Success.Render("✓ Committed successfully"))
+			fmt.Println(style.Success.Render("✓ " + i18n.T("commit.committed")))
 		}
 		fmt.Println(style.Dimmed.Render(final.buildMessage()))
 	}

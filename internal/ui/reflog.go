@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -73,7 +74,7 @@ func (m reflogModel) updateBranch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		name := strings.TrimSpace(m.input.Value())
 		if name == "" {
-			m.errMsg = "branch name is required"
+			m.errMsg = i18n.T("branch.err_name_required")
 			return m, nil
 		}
 		if m.cursor < len(m.entries) {
@@ -82,7 +83,7 @@ func (m reflogModel) updateBranch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.errMsg = err.Error()
 				return m, nil
 			}
-			m.successMsg = fmt.Sprintf("Created branch %q at %s", name, ref)
+			m.successMsg = i18n.Tf("reflog.created_at", name, ref)
 		}
 		m.mode = reflogModeList
 		m.input.Blur()
@@ -143,17 +144,17 @@ func (m reflogModel) viewBranch() string {
 	sb.WriteString(style.Title.Render("gito reflog  ›  recover") + "\n\n")
 	if m.cursor < len(m.entries) {
 		e := m.entries[m.cursor]
-		sb.WriteString(style.Label.Render("대상: ") +
+		sb.WriteString(style.Label.Render(i18n.T("reflog.target")) +
 			reflogHashStyle.Render(e.Short) + " " +
 			reflogSelStyle.Render(e.Selector) + " " +
 			reflogSubStyle.Render(e.Subject) + "\n\n")
 	}
-	sb.WriteString(style.Label.Render("이 지점을 가리키는 새 브랜치 이름:") + "\n\n")
+	sb.WriteString(style.Label.Render(i18n.T("reflog.new_branch_name")) + "\n\n")
 	sb.WriteString(m.input.View() + "\n")
 	if m.errMsg != "" {
 		sb.WriteString("\n" + style.Failure.Render("! "+m.errMsg) + "\n")
 	}
-	sb.WriteString("\n" + style.Dimmed.Render("enter: 생성   esc: 취소   (기존 히스토리는 변경하지 않습니다)"))
+	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("reflog.hint_recover")))
 	return sb.String()
 }
 
@@ -161,9 +162,7 @@ func (m reflogModel) viewList() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito reflog"))
 	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d entries", len(m.entries))) + "\n")
-	sb.WriteString(style.Dimmed.Render(
-		"↑/↓ j/k: 이동   g/G: 처음/끝   b: 이 지점으로 브랜치 생성   q/esc: 종료",
-	) + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("reflog.hint_list")) + "\n\n")
 
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
@@ -173,7 +172,7 @@ func (m reflogModel) viewList() string {
 	}
 
 	if len(m.entries) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No reflog entries") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("reflog.no_entries")) + "\n")
 		return sb.String()
 	}
 
@@ -208,7 +207,7 @@ func RunReflog() {
 		os.Exit(1)
 	}
 	if len(entries) == 0 {
-		fmt.Println("No reflog entries.")
+		fmt.Println(i18n.T("reflog.none"))
 		return
 	}
 	input := textinput.New()

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
+	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
@@ -50,7 +51,7 @@ func doDiff(base, target string) tea.Cmd {
 			return diffContentMsg{"Error: " + err.Error()}
 		}
 		if strings.TrimSpace(out) == "" {
-			return diffContentMsg{"(no differences)"}
+			return diffContentMsg{i18n.T("diff.none")}
 		}
 		return diffContentMsg{out}
 	}
@@ -135,7 +136,7 @@ func (m diffModel) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.target = sel
 		if m.base == m.target {
-			m.errMsg = "base와 target이 동일합니다"
+			m.errMsg = i18n.T("diff.same")
 			return m, nil
 		}
 		m.errMsg = ""
@@ -157,12 +158,12 @@ func (m diffModel) viewPick() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito diff"))
 
-	step := "1/2  base 선택"
+	step := i18n.T("diff.step_base")
 	if m.base != "" {
-		step = "2/2  target 선택"
+		step = i18n.T("diff.step_target")
 	}
 	sb.WriteString(style.Dimmed.Render("  "+step) + "\n")
-	sb.WriteString(style.Dimmed.Render("↑/↓ j/k: 이동   enter: 선택   esc: 뒤로/종료") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("diff.hint_pick")) + "\n\n")
 
 	if m.base != "" {
 		sb.WriteString(style.Label.Render("base: ") + refBaseStyle.Render(m.base) + "\n\n")
@@ -172,7 +173,7 @@ func (m diffModel) viewPick() string {
 	}
 
 	if len(m.refs) == 0 {
-		sb.WriteString(style.Dimmed.Render("  No refs found") + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("diff.no_refs")) + "\n")
 		return sb.String()
 	}
 
@@ -191,9 +192,9 @@ func (m diffModel) viewDiff() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito diff  ›  ") +
 		refBaseStyle.Render(m.base) + style.Dimmed.Render(" .. ") + refTgtStyle.Render(m.target) + "\n")
-	sb.WriteString(style.Dimmed.Render("   ↑/↓: scroll   q/esc: back") + "\n\n")
+	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  Loading..."))
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
 	}
 	sb.WriteString(m.vp.View())
@@ -207,7 +208,7 @@ func RunDiff() {
 		os.Exit(1)
 	}
 	if len(refs) == 0 {
-		fmt.Println("No branches or tags to compare.")
+		fmt.Println(i18n.T("diff.no_compare"))
 		return
 	}
 	p := tea.NewProgram(diffModel{refs: refs}, tea.WithAltScreen())
