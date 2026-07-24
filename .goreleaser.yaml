@@ -1,0 +1,103 @@
+# GoReleaser configuration for gito.
+# Docs: https://goreleaser.com   |   Validate locally: goreleaser check
+# Dry-run a release build:        goreleaser release --snapshot --clean
+version: 2
+
+project_name: gito
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gito
+    main: .
+    binary: gito
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: gito
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - README.ko.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+# Publishes a formula to github.com/mrkayhyun/homebrew-tap so users can
+# `brew install mrkayhyun/tap/gito`.
+#
+# Requires:
+#   * a repo named `homebrew-tap` under the `mrkayhyun` account, and
+#   * a Personal Access Token (repo scope) exposed to the release job as
+#     HOMEBREW_TAP_GITHUB_TOKEN (see .github/workflows/release.yml).
+# If the token is absent the formula upload is skipped so the release still succeeds.
+brews:
+  - name: gito
+    repository:
+      owner: mrkayhyun
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/mrkayhyun/gito"
+    description: "A fast, subcommand-based Git TUI for people who live in the terminal."
+    license: "MIT"
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "gito"
+    test: |
+      system "#{bin}/gito", "version"
+
+release:
+  github:
+    owner: mrkayhyun
+    name: gito
+  draft: false
+  prerelease: auto
+  footer: |
+    ---
+    Full changelog: https://github.com/mrkayhyun/gito/compare/{{ .PreviousTag }}...{{ .Tag }}
