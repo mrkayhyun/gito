@@ -241,7 +241,7 @@ func (m logModel) viewDetail() string {
 		style.Dimmed.Render(i18n.T("log.hint_detail")) + "\n\n"
 
 	if !m.vpReady {
-		return header + style.Dimmed.Render("  " + i18n.T("common.loading"))
+		return header + style.Dimmed.Render("  "+i18n.T("common.loading"))
 	}
 	return header + m.vp.View()
 }
