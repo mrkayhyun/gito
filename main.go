@@ -25,11 +25,7 @@ func main() {
 
 	// No arguments → launch the interactive command picker.
 	if len(os.Args) < 2 {
-		cmd := ui.RunMenu()
-		if cmd == "" {
-			return // user quit the menu
-		}
-		dispatch(cmd)
+		launchMenu()
 		return
 	}
 
@@ -39,11 +35,17 @@ func main() {
 	case "version", "--version", "-v":
 		fmt.Printf("gito %s\n", version)
 	case "menu":
-		if cmd := ui.RunMenu(); cmd != "" {
-			dispatch(cmd)
-		}
+		launchMenu()
 	default:
 		dispatch(os.Args[1])
+	}
+}
+
+// launchMenu shows the interactive picker and runs whatever it returns.
+func launchMenu() {
+	style.Detect()
+	if cmd := ui.RunMenu(); cmd != "" {
+		dispatch(cmd)
 	}
 }
 
@@ -61,6 +63,14 @@ func dispatch(cmd string) {
 		fmt.Fprintln(os.Stderr, style.Dimmed.Render(i18n.T("err.not_a_repo_hint")))
 		os.Exit(1)
 	}
+
+	// Resolve the color profile and the light/dark background before the screen
+	// starts, while gito still owns the terminal in cooked mode: the adaptive
+	// colors would otherwise trigger that detection during the first render,
+	// from inside a Bubble Tea program that has taken stdin over. It is only
+	// done on the paths that actually draw a UI, so `gito version` and `gito
+	// help` still talk to nothing but their own output stream.
+	style.Detect()
 
 	switch cmd {
 	case "commit":

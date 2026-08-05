@@ -237,7 +237,7 @@ func (m reflogModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.entries) == 0 {
@@ -246,12 +246,13 @@ func (m reflogModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, reflogLine(l, m.entries[i])))
+		lines = append(lines, row(rl, i == w.Cursor, reflogLine(rl, m.entries[i])))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 // reflogLine renders one entry as hash, selector, action and subject. The two

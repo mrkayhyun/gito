@@ -308,7 +308,7 @@ func (m remoteModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.remotes) == 0 {
@@ -317,14 +317,15 @@ func (m remoteModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
 		r := m.remotes[i]
 		content := style.Ref.Render(r.Name) + "  " + style.Subject.Render(r.FetchURL)
-		lines = append(lines, row(l, i == w.Cursor, content))
+		lines = append(lines, row(rl, i == w.Cursor, content))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 func (m remoteModel) viewOutput() string {

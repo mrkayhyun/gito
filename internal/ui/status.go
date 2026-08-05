@@ -373,7 +373,7 @@ func (m statusModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.entries) == 0 {
@@ -382,6 +382,7 @@ func (m statusModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	prevSec := statusSection(-1)
@@ -389,16 +390,16 @@ func (m statusModel) viewList() string {
 		e := m.entries[i]
 		if e.section != prevSec {
 			prevSec = e.section
-			lines = append(lines, m.sectionRule(l, e.section))
+			lines = append(lines, m.sectionRule(rl, e.section))
 		}
 		xy := string([]byte{e.file.Staged, e.file.Unstaged})
 		if e.section == secUntracked {
 			xy = "??"
 		}
 		content := e.section.paint(xy) + " " + e.section.paint(e.file.Path)
-		lines = append(lines, row(l, i == w.Cursor, content))
+		lines = append(lines, row(rl, i == w.Cursor, content))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 // sectionRule draws the "── Staged ──" separator from the glyph table, so a

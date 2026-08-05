@@ -403,12 +403,13 @@ func (m branchModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, branchLine(filtered[i], m.current)))
+		lines = append(lines, row(rl, i == w.Cursor, branchLine(filtered[i], m.current)))
 	}
-	return frameInlineFit(l, head, lines, foot)
+	return frameInlineFit(l, head, splitLines(listBody(l, w, lines)), foot)
 }
 
 // branchLine renders one branch, marking the checked-out one with a leading

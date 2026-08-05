@@ -232,12 +232,13 @@ func (m blameModel) viewPick() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, style.Subject.Render(filtered[i])))
+		lines = append(lines, row(rl, i == w.Cursor, style.Subject.Render(filtered[i])))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 func (m blameModel) viewBlame() string {

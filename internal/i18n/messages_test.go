@@ -81,13 +81,13 @@ func TestKeyHintVocabularyPresent(t *testing.T) {
 	vocabulary := []string{
 		"key.move", "key.top_bottom", "key.scroll", "key.page", "key.select",
 		"key.run", "key.quick_select", "key.detail", "key.diff", "key.filter",
-		"key.back", "key.quit", "key.close", "key.help", "key.stage_toggle",
+		"key.back", "key.quit", "key.help", "key.stage_toggle",
 		"key.stage_all", "key.discard", "key.switch", "key.create", "key.rename",
 		"key.delete", "key.force_delete", "key.pop", "key.apply", "key.drop",
 		"key.push", "key.remote_delete", "key.fetch", "key.fetch_all",
 		"key.refresh", "key.branch_here", "key.view_blame", "key.next",
-		"key.cancel", "key.confirm", "key.field", "key.amend", "key.edit",
-		"help.keys_title",
+		"key.cancel", "key.confirm", "key.field",
+		"help.keys_title", "help.more",
 	}
 	for lang, m := range map[Lang]map[string]string{En: en, Ko: ko, Ja: ja, Zh: zh} {
 		for _, k := range vocabulary {

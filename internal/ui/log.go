@@ -203,16 +203,17 @@ func (m logModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, m.commitLine(l, m.commits[i])))
+		lines = append(lines, row(rl, i == w.Cursor, m.commitLine(rl, m.commits[i])))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 func (m logModel) viewDetail() string {

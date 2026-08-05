@@ -281,7 +281,7 @@ func (m stashModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.stashes) == 0 {
@@ -290,12 +290,13 @@ func (m stashModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, stashLine(m.stashes[i])))
+		lines = append(lines, row(rl, i == w.Cursor, stashLine(m.stashes[i])))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 // stashLine renders one stash as ref, originating branch and subject.

@@ -421,7 +421,7 @@ func (m tagModel) viewList() string {
 	foot := footer(l, hints, true)
 
 	if m.helpOpen {
-		return frameFull(l, head, helpOverlay(l, hints), foot)
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.tags) == 0 {
@@ -430,12 +430,13 @@ func (m tagModel) viewList() string {
 	}
 
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 	var lines []string
 	for i := start; i < end; i++ {
-		lines = append(lines, row(l, i == w.Cursor, tagLine(m.tags[i])))
+		lines = append(lines, row(rl, i == w.Cursor, tagLine(m.tags[i])))
 	}
-	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 // tagLine renders one tag as name, kind, target hash, date and subject.

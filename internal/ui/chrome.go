@@ -64,6 +64,12 @@ func (l layout) norm() layout {
 // the caller spends on header, footer, banners and blank separators, counted
 // from what it actually renders instead of a per-screen magic constant. The
 // result is always at least 1.
+//
+// Contract for callers: measuring means rendering here. A screen's head builder
+// (listHead, pickHead, …) is called once to count its lines and again to render
+// them, from both Update and View, so those builders must stay cheap and free
+// of side effects. Anything expensive put in one multiplies per frame; cache it
+// in the model instead.
 func bodyRows(l layout, chromeLines int) int {
 	return max(l.norm().Height-chromeLines, 1)
 }
@@ -250,7 +256,14 @@ func escQuitHint() keyHint {
 // helpOverlay renders the full hint list as an aligned two-column table inside
 // a bordered box, titled with help.keys_title. This is where the long hint
 // sentences that used to hard-wrap on an 80-column terminal now live.
-func helpOverlay(l layout, hints []keyHint) string {
+//
+// rows is how many terminal rows the box may occupy. The table fits itself into
+// that budget - dropping trailing hints for a "+N more" note - because the
+// overlay exists to serve small terminals and letting the frame cut it would
+// take away its bottom border and its last hints, which is the opposite of
+// degrading gracefully. Callers normally reach this through frameOverlay, which
+// measures the budget from the head and footer it is framing with.
+func helpOverlay(l layout, rows int, hints []keyHint) string {
 	l = l.norm()
 
 	keyW := 0
@@ -268,6 +281,30 @@ func helpOverlay(l layout, hints []keyHint) string {
 		// the two columns aligned despite the ANSI escapes.
 		line := style.Pad(style.KeyCap.Render(keys), keyW) + "  " + style.KeyDesc.Render(desc)
 		lines = append(lines, style.Truncate(line, inner))
+	}
+
+	// Fit the table to the rows available. A box needs two of them for its
+	// borders plus one of content, so below three rows the border is dropped
+	// entirely rather than rendered half-open. When the title plus the hints
+	// still do not fit, the tail becomes a "+N more" note, so the user knows
+	// hints are hidden rather than missing.
+	boxed := rows >= 3
+	budget := rows
+	if boxed {
+		budget = rows - 2
+	}
+	if budget = max(budget, 1); len(lines) > budget {
+		if budget == 1 {
+			lines = lines[:1]
+		} else {
+			keep := budget - 1
+			hidden := len(lines) - keep
+			lines = append(lines[:keep:keep],
+				style.Truncate(style.MetaDim.Render(i18n.Tf("help.more", hidden)), inner))
+		}
+	}
+	if !boxed {
+		return strings.Join(lines, "\n")
 	}
 
 	// The gutter is spaces rather than style Padding, because the semantic
@@ -337,7 +374,10 @@ func row(l layout, selected bool, content string) string {
 	}
 	line := style.Pad(style.Truncate(gutter+oneLine(content), l.Width), l.Width)
 	if selected {
-		return style.RowSel.Render(line)
+		// style.SelectRow, not RowSel.Render: content arrives pre-styled and a
+		// plain Render would let the first cell's reset clear the background for
+		// the rest of the line.
+		return style.SelectRow(line)
 	}
 	return line
 }
@@ -399,22 +439,74 @@ func (w listWindow) position() string {
 	return fmt.Sprintf("%d/%d", c.Cursor+1, c.Total)
 }
 
+// scrolls reports whether the list is longer than its window, which is when a
+// scrollbar carries information.
+func (w listWindow) scrolls() bool {
+	c := w.clamp()
+	return c.Total > max(c.Rows, 1)
+}
+
 // scrollbar returns the gutter cell for the given visible row (0-based,
-// relative to Offset). It is a single space when everything fits, so a short
-// list gets no distracting bar. Callers that prefix it to a row must render
-// that row into layout{Width: l.Width - 1} so the pair still fits the terminal.
+// relative to Offset). It is a single space for a row outside the window and
+// for a list that fits its window, so a short list gets no distracting bar.
+// Screens do not call this directly: listLayout and listBody below are the pair
+// that reserves the column and fills it.
 func (w listWindow) scrollbar(visible int) string {
 	c := w.clamp()
 	rows := max(c.Rows, 1)
 	if c.Total <= rows || visible < 0 || visible >= rows {
 		return " "
 	}
+	// The thumb is sized by the fraction of the list on screen and positioned by
+	// mapping the scrollable range [0, Total-Rows] onto the track it can move
+	// along, [0, Rows-size], so it touches the top and the bottom exactly when
+	// the list does.
 	size := max(rows*rows/c.Total, 1)
-	start := min(c.Offset*rows/c.Total, rows-size)
+	span := max(rows-size, 0)
+	start := 0
+	if scrollable := c.Total - rows; scrollable > 0 {
+		start = min(c.Offset*span/scrollable, span)
+	}
 	if visible >= start && visible < start+size {
 		return style.ScrollThumb.Render(style.G.ScrollThumb)
 	}
 	return style.ScrollTrack.Render(style.G.ScrollTrack)
+}
+
+// listLayout is the geometry list rows must be rendered into so the scrollbar
+// column fits beside them: one column narrower while the list scrolls, and the
+// full width when everything fits and no bar is drawn. It is always paired with
+// listBody, which fills the column that was reserved here.
+func listLayout(l layout, w listWindow) layout {
+	l = l.norm()
+	if !w.scrolls() {
+		return l
+	}
+	return layout{Width: max(l.Width-1, 1), Height: l.Height}
+}
+
+// listBody joins rendered list rows and pins the scrollbar column to the right
+// edge, so the user can see where in a long list the window sits instead of
+// reading the header's cursor/total cell.
+//
+// Cell i belongs to line i and every line is padded to the reserved width
+// first, which is what keeps the column straight on panes that interleave lines
+// that are not rows: status draws an unpadded section rule per group. Those
+// extra lines are also why the bar is measured against the number of lines
+// rendered rather than the window's row count.
+func listBody(l layout, w listWindow, lines []string) string {
+	if !w.scrolls() {
+		return strings.Join(lines, "\n")
+	}
+	width := max(l.norm().Width-1, 1)
+	bar := w.clamp()
+	bar.Rows = max(bar.Rows, len(lines))
+
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = style.Pad(style.Truncate(line, width), width) + bar.scrollbar(i)
+	}
+	return strings.Join(out, "\n")
 }
 
 // ── frames ─────────────────────────────────────────────────────────────────
@@ -444,6 +536,15 @@ func frameFull(l layout, head, body, foot string) string {
 		lines = lines[:l.Height]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// frameOverlay frames the help overlay into the body area of an alt-screen
+// pane. It is the only way screens open the key table, so the box is always
+// sized to the rows head and footer leave behind instead of being cut by the
+// frame on a short terminal.
+func frameOverlay(l layout, head string, hints []keyHint, foot string) string {
+	rows := bodyRows(l, len(splitLines(head))+len(splitLines(foot)))
+	return frameFull(l, head, helpOverlay(l, rows, hints), foot)
 }
 
 // frameInline composes a view for the models that run WITHOUT alt screen

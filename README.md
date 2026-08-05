@@ -199,7 +199,9 @@ gito should look the same in a local terminal and over SSH on a bare server.
   Set `GITO_ASCII=1` (also `true` / `yes` / `y` / `on`) to force the ASCII table anywhere.
 - **Any terminal size.** Every screen reacts to resize: lists scroll and keep the cursor visible, key
   hints are dropped to fit one line, and long lines are truncated instead of wrapping. Narrow or short
-  terminals get a degraded layout rather than a broken one.
+  terminals get a degraded layout rather than a broken one. The layout floors at **20 columns by
+  6 rows**: below that gito keeps laying out for 20x6, so a narrower terminal wraps lines and a
+  shorter one scrolls. Every size at or above the floor is handled without wrapping.
 
 ## Architecture
 
@@ -219,8 +221,9 @@ main.go                 // subcommand routing + help
 All ten command models render through `internal/ui/chrome.go`, so the body-height math, the one-line
 header, the fitted key-hint footer, the `?` overlay, message and confirmation banners, selected rows
 and list scrolling are written once instead of per screen. `internal/style` exposes color *roles*
-(`Hash`, `Danger`, `Meta`, …) instead of hex codes, plus the Unicode/ASCII glyph table and
-ANSI-aware width helpers that keep pre-colored `git` output from breaking the layout.
+(`Hash`, `MetaDim`, `Staged`, `Unstaged`, `DangerBar`, …) instead of hex codes, plus the
+Unicode/ASCII glyph table and ANSI-aware width helpers that keep pre-colored `git` output from
+breaking the layout.
 
 **Design principle:** state lives in the model, side effects live in the git layer, and the UI stays
 a pure `Update` function — easy to test and reason about.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 // ── theme ──────────────────────────────────────────────────────────────────
@@ -66,6 +67,27 @@ var th = theme{
 	Time:      lipgloss.AdaptiveColor{Light: "#1D8348", Dark: "#27AE60"},
 	Author:    lipgloss.AdaptiveColor{Light: "#767676", Dark: "#636363"},
 	Border:    lipgloss.AdaptiveColor{Light: "#5B3FBF", Dark: "#7D56F4"},
+}
+
+// ── terminal detection ─────────────────────────────────────────────────────
+
+// Detect resolves, once and up front, the two terminal-dependent decisions Lip
+// Gloss would otherwise make lazily during the first render: the color profile
+// and whether the background is dark.
+//
+// The lazy path matters because every color here is adaptive, and resolving an
+// AdaptiveColor asks the terminal for its background color (OSC 11) with ECHO
+// and ICANON temporarily off. Inside a running Bubble Tea program the terminal
+// is in raw mode and bubbletea owns stdin, so that reply can land in the input
+// reader and a keystroke can land in the detection read. main calls Detect
+// before the first tea.NewProgram, while gito still owns the terminal, which
+// keeps the light-background support without racing the input reader.
+//
+// Both values are set explicitly, so nothing queries the terminal again and
+// calling Detect more than once costs nothing.
+func Detect() {
+	lipgloss.SetColorProfile(lipgloss.ColorProfile())
+	lipgloss.SetHasDarkBackground(lipgloss.HasDarkBackground())
 }
 
 // ── legacy styles ──────────────────────────────────────────────────────────
@@ -151,6 +173,48 @@ var (
 	ScrollTrack = lipgloss.NewStyle().Foreground(th.FgSubtle)
 	ScrollThumb = lipgloss.NewStyle().Foreground(th.Accent)
 )
+
+// The two SGR resets that can reach a rendered line: Lip Gloss ends a style
+// with ESC[0m, and the pre-colored output git produces with --color=always ends
+// one with the shorter ESC[m.
+const (
+	resetSeq    = "\x1b[0m"
+	gitResetSeq = "\x1b[m"
+)
+
+// SelectRow paints a whole line with the selected-row style.
+//
+// It exists because Lip Gloss copies pre-styled content through verbatim: the
+// reset that ends an inner cell also clears the row background, so a plain
+// RowSel.Render() highlights the cursor gutter and the first cell and then
+// drops back to the default background for the rest of the line. SelectRow
+// re-opens the row style after every reset, so the bar reaches the edge of the
+// terminal while each cell keeps its own color.
+//
+// With no color profile active (a pipe, NO_COLOR, `go test`) the row style
+// renders no escapes and the line is returned unchanged.
+func SelectRow(line string) string {
+	open, end := wrapOf(RowSel)
+	if open == "" {
+		return line
+	}
+	line = strings.ReplaceAll(line, resetSeq, resetSeq+open)
+	line = strings.ReplaceAll(line, gitResetSeq, gitResetSeq+open)
+	return open + line + end
+}
+
+// wrapOf reports the escape sequences a style wraps its content in, by
+// rendering a marker that cannot occur in real content and splitting around it.
+// Both are empty when the active profile has no colors.
+func wrapOf(s lipgloss.Style) (open, end string) {
+	const marker = "\x1f" // ASCII unit separator: never rendered by gito
+	probe := s.Render(marker)
+	i := strings.Index(probe, marker)
+	if i < 0 {
+		return "", ""
+	}
+	return probe[:i], probe[i+len(marker):]
+}
 
 // Box is the bordered-box style for the active glyph table: the rounded Unicode
 // border normally, and an ASCII one when the terminal cannot render box drawing
@@ -287,6 +351,21 @@ func UseASCII(ascii bool) func() {
 		G = UnicodeGlyphs
 	}
 	return func() { G = prev }
+}
+
+// UseColor forces a color profile and a known background, returning a function
+// that restores the previous pair. It is the test seam for everything that is
+// only observable in the escape sequences - the selected-row bar above, and
+// adaptive light/dark resolution - because Lip Gloss reports no color profile
+// under `go test`, where the test binary's stdout is not a terminal.
+func UseColor(dark bool) func() {
+	prevProfile, prevDark := lipgloss.ColorProfile(), lipgloss.HasDarkBackground()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	lipgloss.SetHasDarkBackground(dark)
+	return func() {
+		lipgloss.SetColorProfile(prevProfile)
+		lipgloss.SetHasDarkBackground(prevDark)
+	}
 }
 
 // ── width helpers ──────────────────────────────────────────────────────────

@@ -180,6 +180,7 @@ func (m menuModel) View() string {
 
 	keyW := menuKeyWidth()
 	w := m.window()
+	rl := listLayout(l, w)
 	start, end := w.bounds()
 
 	var lines []string
@@ -190,12 +191,12 @@ func (m menuModel) View() string {
 		content := badge + " " + item.Icon() + " " +
 			style.Pad(style.Subject.Render(item.Key), keyW) + "  " +
 			style.MetaDim.Render(item.Desc())
-		lines = append(lines, row(l, i == w.Cursor, content))
+		lines = append(lines, row(rl, i == w.Cursor, content))
 	}
 
 	// The launcher runs without alt screen and prints its result to stdout, so
 	// it must never pad to the terminal height.
-	return frameInlineFit(l, head, lines, foot)
+	return frameInlineFit(l, head, splitLines(listBody(l, w, lines)), foot)
 }
 
 // ── RunMenu ──────────────────────────────────────────────────────────────────

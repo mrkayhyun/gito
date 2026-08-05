@@ -348,11 +348,13 @@ func (m commitModel) stepBody(l layout) []string {
 		}
 		// head (4) + label + blank + footer come off the terminal height.
 		w := listWindow{Cursor: m.cursor, Total: len(m.typeLabels), Rows: bodyRows(l, 7)}.clamp()
+		rl := listLayout(l, w)
 		start, end := w.bounds()
+		var rows []string
 		for i := start; i < end; i++ {
-			lines = append(lines, row(l, i == w.Cursor, style.Subject.Render(m.typeLabels[i])))
+			rows = append(rows, row(rl, i == w.Cursor, style.Subject.Render(m.typeLabels[i])))
 		}
-		return lines
+		return append(lines, splitLines(listBody(l, w, rows))...)
 
 	case stepScope:
 		return []string{

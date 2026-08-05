@@ -169,7 +169,7 @@ func TestHelpOverlayListsEveryHint(t *testing.T) {
 		{"P", "remote delete"},
 		{"q/esc", "quit"},
 	}
-	got := stripSGR(helpOverlay(newLayout(), hints))
+	got := stripSGR(helpOverlay(newLayout(), newLayout().Height, hints))
 	for _, h := range hints {
 		if !strings.Contains(got, h.Keys) {
 			t.Errorf("help overlay is missing keys %q:\n%s", h.Keys, got)
