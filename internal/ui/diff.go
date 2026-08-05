@@ -180,7 +180,7 @@ func (m diffModel) viewPick() string {
 	for i, r := range m.refs {
 		disp := refStyle.Render(r)
 		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + selRowBg.Render(disp) + "\n")
+			sb.WriteString(style.Cursor.Render(style.G.Cursor) + " " + style.RowSel.Render(disp) + "\n")
 		} else {
 			sb.WriteString("  " + disp + "\n")
 		}

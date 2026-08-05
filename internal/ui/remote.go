@@ -211,7 +211,7 @@ func (m remoteModel) viewList() string {
 	for i, r := range m.remotes {
 		row := remoteNameStyle.Render(r.Name) + "  " + remoteURLStyle.Render(r.FetchURL)
 		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + selRowBg.Render(row) + "\n")
+			sb.WriteString(style.Cursor.Render(style.G.Cursor) + " " + style.RowSel.Render(row) + "\n")
 		} else {
 			sb.WriteString("  " + row + "\n")
 		}

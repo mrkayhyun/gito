@@ -192,7 +192,7 @@ func (m reflogModel) viewList() string {
 			reflogActStyle.Render(fmt.Sprintf("%-24s", action)) + " " +
 			reflogSubStyle.Render(e.Subject)
 		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + selRowBg.Render(row) + "\n")
+			sb.WriteString(style.Cursor.Render(style.G.Cursor) + " " + style.RowSel.Render(row) + "\n")
 		} else {
 			sb.WriteString("  " + row + "\n")
 		}

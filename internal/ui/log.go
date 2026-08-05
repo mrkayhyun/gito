@@ -7,26 +7,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
 	"gito/internal/i18n"
 	"gito/internal/style"
-)
-
-// ── lipgloss styles for the commit list ──────────────────────────────────────
-
-var (
-	hashStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	dateStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	msgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	authorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#636363"))
-
-	selBar     = lipgloss.NewStyle().Background(lipgloss.Color("#312E55"))
-	selHash    = hashStyle.Background(lipgloss.Color("#312E55"))
-	selDate    = dateStyle.Background(lipgloss.Color("#312E55"))
-	selMsg     = msgStyle.Bold(true).Background(lipgloss.Color("#312E55"))
-	selAuthor  = authorStyle.Background(lipgloss.Color("#312E55"))
-	cursorGlyp = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true)
 )
 
 // ── model ────────────────────────────────────────────────────────────────────
@@ -48,8 +31,8 @@ type logModel struct {
 	vpReady   bool
 	vpContent string // raw content waiting to be set when vp is init'd
 
-	width  int
-	height int
+	helpOpen bool
+	lay      layout
 }
 
 // ── tea messages ─────────────────────────────────────────────────────────────
@@ -77,19 +60,18 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- window resize ----
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if m.pane == paneDetail {
-			if m.vpReady {
-				m.vp.Width = msg.Width
-				m.vp.Height = m.detailHeight()
-			}
+		m.lay = m.lay.resize(msg.Width, msg.Height)
+		if m.vpReady {
+			m.vp.Width = m.lay.Width
+			m.vp.Height = m.detailRows()
 		}
+		m.offset = m.window().Offset
 		return m, nil
 
 	// ---- detail content loaded ----
 	case detailReadyMsg:
 		m.vpContent = msg.content
-		m.vp = viewport.New(m.width, m.detailHeight())
+		m.vp = viewport.New(m.lay.norm().Width, m.detailRows())
 		m.vp.SetContent(msg.content)
 		m.vpReady = true
 		return m, nil
@@ -104,49 +86,52 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m logModel) detailHeight() int {
-	h := m.height - 3 // header (2 lines) + blank line
-	if h < 1 {
-		h = 1
-	}
-	return h
-}
+// detailRows is the height of the detail viewport: the pane spends one line on
+// the header, one on the commit summary, one blank separator and one footer.
+func (m logModel) detailRows() int { return bodyRows(m.lay, 4) }
 
-func (m logModel) visibleRows() int {
-	v := m.height - 3 // title + hint + blank
-	if v < 1 {
-		return 10
-	}
-	return v
+// listRows is how many commits fit under the list header and above the footer.
+func (m logModel) listRows() int { return bodyRows(m.lay, 3) }
+
+// window is the scrolling state of the commit list.
+func (m logModel) window() listWindow {
+	return listWindow{
+		Cursor: m.cursor,
+		Offset: m.offset,
+		Total:  len(m.commits),
+		Rows:   m.listRows(),
+	}.clamp()
 }
 
 func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	vis := m.visibleRows()
+	if m.helpOpen {
+		switch msg.String() {
+		case "?", "q", "esc":
+			m.helpOpen = false
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
+	case "?":
+		m.helpOpen = true
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
-			if m.cursor < m.offset {
-				m.offset = m.cursor
-			}
 		}
 	case "down", "j":
 		if m.cursor < len(m.commits)-1 {
 			m.cursor++
-			if m.cursor >= m.offset+vis {
-				m.offset = m.cursor - vis + 1
-			}
 		}
 	case "g": // jump to top
 		m.cursor = 0
 		m.offset = 0
 	case "G": // jump to bottom
 		m.cursor = len(m.commits) - 1
-		if m.cursor-vis+1 > 0 {
-			m.offset = m.cursor - vis + 1
-		}
 	case "enter":
 		if len(m.commits) == 0 {
 			return m, nil
@@ -155,6 +140,8 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vpReady = false
 		return m, fetchDetail(m.commits[m.cursor].Hash)
 	}
+	w := m.window()
+	m.cursor, m.offset = w.Cursor, w.Offset
 	return m, nil
 }
 
@@ -173,6 +160,17 @@ func (m logModel) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// ── hints ────────────────────────────────────────────────────────────────────
+
+func logListHints() []keyHint {
+	return []keyHint{
+		moveHint(),
+		{Keys: "g/G", Desc: i18n.T("key.top_bottom")},
+		{Keys: "enter", Desc: i18n.T("key.detail")},
+		quitHint(),
+	}
+}
+
 // ── View ─────────────────────────────────────────────────────────────────────
 
 func (m logModel) View() string {
@@ -182,68 +180,65 @@ func (m logModel) View() string {
 	return m.viewList()
 }
 
+// commitLine renders one commit as hash, date, subject and author. The subject
+// is cut with the ANSI-aware helper so a colored cell is measured in columns.
+func (m logModel) commitLine(l layout, c git.CommitEntry) string {
+	// Room for hash, date, author and the row gutter.
+	maxSubject := max(l.Width-30, 20)
+	return style.Hash.Render(c.Short) + " " +
+		style.Date.Render(c.Date) + " " +
+		style.Subject.Render(style.Truncate(c.Subject, maxSubject)) + " " +
+		style.AuthorName.Render("("+c.Author+")")
+}
+
 func (m logModel) viewList() string {
-	var sb strings.Builder
+	l := m.lay.norm()
+	hints := logListHints()
 
-	// header
-	sb.WriteString(style.Title.Render("gito log"))
-	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
-	sb.WriteString("\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_list")))
-	sb.WriteString("\n\n")
+	meta := i18n.Tf("meta.commits", len(m.commits))
+	if pos := m.window().position(); pos != "" {
+		meta += "  " + pos
+	}
+	head := header(l, "log", "", meta) + "\n"
+	foot := footer(l, hints, true)
 
-	vis := m.visibleRows()
-	end := m.offset + vis
-	if end > len(m.commits) {
-		end = len(m.commits)
+	if m.helpOpen {
+		return frameFull(l, head, helpOverlay(l, hints), foot)
 	}
 
-	maxSubject := m.width - 30 // leave room for hash + date + author
-	if maxSubject < 20 {
-		maxSubject = 20
+	w := m.window()
+	start, end := w.bounds()
+	var lines []string
+	for i := start; i < end; i++ {
+		lines = append(lines, row(l, i == w.Cursor, m.commitLine(l, m.commits[i])))
 	}
-
-	for i := m.offset; i < end; i++ {
-		c := m.commits[i]
-		subj := c.Subject
-		if len([]rune(subj)) > maxSubject {
-			subj = string([]rune(subj)[:maxSubject-1]) + "…"
-		}
-
-		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " ")
-			sb.WriteString(selHash.Render(c.Short) + " ")
-			sb.WriteString(selDate.Render(c.Date) + " ")
-			sb.WriteString(selMsg.Render(subj) + " ")
-			sb.WriteString(selAuthor.Render("(" + c.Author + ")"))
-			sb.WriteString(selBar.Render(""))
-		} else {
-			sb.WriteString("  ")
-			sb.WriteString(hashStyle.Render(c.Short) + " ")
-			sb.WriteString(dateStyle.Render(c.Date) + " ")
-			sb.WriteString(msgStyle.Render(subj) + " ")
-			sb.WriteString(authorStyle.Render("(" + c.Author + ")"))
-		}
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
+	return frameFull(l, head, strings.Join(lines, "\n"), foot)
 }
 
 func (m logModel) viewDetail() string {
-	c := m.commits[m.cursor]
+	l := m.lay.norm()
 
-	header := style.Title.Render("gito log  ›  detail") + "\n" +
-		hashStyle.Render(c.Short) + "  " +
-		dateStyle.Render(c.Date) + "  " +
-		msgStyle.Render(c.Subject) + "  " +
-		authorStyle.Render("("+c.Author+")") + "\n" +
-		style.Dimmed.Render(i18n.T("log.hint_detail")) + "\n\n"
+	summary := ""
+	// RunLog never starts on an empty log, but the model must not index into an
+	// empty slice if it is driven there anyway.
+	if m.cursor < len(m.commits) {
+		c := m.commits[m.cursor]
+		summary = style.Hash.Render(c.Short) + "  " +
+			style.Date.Render(c.Date) + "  " +
+			style.Subject.Render(c.Subject) + "  " +
+			style.AuthorName.Render("("+c.Author+")")
+	}
+	head := strings.Join([]string{
+		header(l, "log", i18n.T("key.detail"), ""),
+		style.Truncate(summary, l.Width),
+		"",
+	}, "\n")
+	foot := footer(l, scrollHints(), false)
 
 	if !m.vpReady {
-		return header + style.Dimmed.Render("  "+i18n.T("common.loading"))
+		return frameFull(l, head, style.MetaDim.Render("  "+i18n.T("common.loading")), foot)
 	}
-	return header + m.vp.View()
+	return frameFull(l, head, m.vp.View(), foot)
 }
 
 // ── RunLog ───────────────────────────────────────────────────────────────────
@@ -259,7 +254,7 @@ func RunLog() {
 		return
 	}
 
-	m := logModel{commits: entries}
+	m := logModel{commits: entries, lay: newLayout()}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

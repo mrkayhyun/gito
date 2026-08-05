@@ -8,18 +8,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
 	"gito/internal/i18n"
 	"gito/internal/style"
-)
-
-var (
-	tagNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	tagHashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8E44AD"))
-	tagDateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	tagMsgStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	tagKindStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#636363"))
 )
 
 // ── panes ─────────────────────────────────────────────────────────────────────
@@ -37,6 +28,7 @@ const (
 type tagModel struct {
 	tags   []git.TagEntry
 	cursor int
+	offset int // first visible row of the tag list
 	pane   tagPane
 
 	vp      viewport.Model
@@ -49,9 +41,10 @@ type tagModel struct {
 
 	confirmDelete       bool
 	confirmRemoteDelete bool
+	helpOpen            bool
 	errMsg              string
 	successMsg          string
-	width, height       int
+	lay                 layout
 }
 
 // ── messages ──────────────────────────────────────────────────────────────────
@@ -92,23 +85,26 @@ func (m tagModel) Init() tea.Cmd { return doTagLoad() }
 func (m tagModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		m.lay = m.lay.resize(msg.Width, msg.Height)
 		if m.vpReady {
-			m.vp.Width = msg.Width
-			m.vp.Height = m.tagVPHeight()
+			m.vp.Width = m.lay.Width
+			m.vp.Height = m.showRows()
 		}
+		m.offset = m.window().Offset
+		m.fitFormWidth()
 
 	case tagListMsg:
 		m.tags = msg.tags
 		if m.cursor >= len(m.tags) && len(m.tags) > 0 {
 			m.cursor = len(m.tags) - 1
 		}
+		m.offset = m.window().Offset
 
 	case tagErrMsg:
 		m.errMsg = msg.err.Error()
 
 	case tagShowMsg:
-		m.vp = viewport.New(m.width, m.tagVPHeight())
+		m.vp = viewport.New(m.lay.norm().Width, m.showRows())
 		m.vp.SetContent(msg.content)
 		m.vpReady = true
 
@@ -125,12 +121,38 @@ func (m tagModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m tagModel) tagVPHeight() int {
-	h := m.height - 4
-	if h < 1 {
-		return 1
-	}
-	return h
+// showRows is the height of the tag detail viewport: header, tag summary, blank
+// separator and footer come off the terminal height.
+func (m tagModel) showRows() int { return bodyRows(m.lay, 4) }
+
+// listRows is how many tags fit under the list header, banners included.
+func (m tagModel) listRows() int { return bodyRows(m.lay, len(m.listHead())+1) }
+
+// window is the scrolling state of the tag list.
+func (m tagModel) window() listWindow {
+	return listWindow{
+		Cursor: m.cursor,
+		Offset: m.offset,
+		Total:  len(m.tags),
+		Rows:   m.listRows(),
+	}.clamp()
+}
+
+// fitFormWidth keeps the create-form inputs inside the terminal, so a narrow
+// window cannot make the form wrap.
+func (m *tagModel) fitFormWidth() {
+	w := max(m.lay.norm().Width-tagLabelWidth()-6, 10)
+	m.nameInput.Width = w
+	m.msgInput.Width = w
+}
+
+// tagLabelWidth is the column width shared by the two form labels so the
+// fields line up in every locale.
+func tagLabelWidth() int {
+	return max(
+		style.DisplayWidth(i18n.T("tag.field_name")),
+		style.DisplayWidth(i18n.T("tag.field_message")),
+	) + 1 // trailing colon
 }
 
 func (m tagModel) updateShow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -244,12 +266,26 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Key overlay. It sits below both confirmations so an armed confirmation
+	// still treats every key as confirm-or-cancel.
+	if m.helpOpen {
+		switch msg.String() {
+		case "?", "q", "esc":
+			m.helpOpen = false
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	m.errMsg = ""
 	m.successMsg = ""
 
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
+	case "?":
+		m.helpOpen = true
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -260,6 +296,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "g":
 		m.cursor = 0
+		m.offset = 0
 	case "G":
 		m.cursor = len(m.tags) - 1
 		if m.cursor < 0 {
@@ -280,6 +317,7 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.msgInput.SetValue("")
 		m.createIdx = 0
 		m.pane = tagPaneCreate
+		m.fitFormWidth()
 		return m, m.focusCreateField()
 	case "p": // push tag to origin
 		if m.cursor < len(m.tags) {
@@ -301,7 +339,31 @@ func (m tagModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.confirmDelete = true
 		}
 	}
+	m.offset = m.window().Offset
 	return m, nil
+}
+
+// ── hints ────────────────────────────────────────────────────────────────────
+
+func tagListHints() []keyHint {
+	return []keyHint{
+		{Keys: "enter/d", Desc: i18n.T("key.detail")},
+		{Keys: "c", Desc: i18n.T("key.create")},
+		{Keys: "p", Desc: i18n.T("key.push")},
+		{Keys: "P", Desc: i18n.T("key.remote_delete")},
+		{Keys: "D", Desc: i18n.T("key.delete")},
+		moveHint(),
+		{Keys: "g/G", Desc: i18n.T("key.top_bottom")},
+		quitHint(),
+	}
+}
+
+func tagCreateHints() []keyHint {
+	return []keyHint{
+		{Keys: "tab", Desc: i18n.T("key.field")},
+		{Keys: "enter", Desc: i18n.T("key.next")},
+		{Keys: "esc", Desc: i18n.T("key.cancel")},
+	}
 }
 
 // ── View ─────────────────────────────────────────────────────────────────────
@@ -317,97 +379,127 @@ func (m tagModel) View() string {
 	}
 }
 
-func (m tagModel) viewList() string {
-	var sb strings.Builder
+// position reports "cursor/total" without depending on the visible row count.
+func (m tagModel) position() string {
+	return listWindow{Cursor: m.cursor, Total: len(m.tags), Rows: 1}.position()
+}
 
-	sb.WriteString(style.Title.Render("gito tag"))
-	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d tags", len(m.tags))) + "\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("tag.hint_list")) + "\n\n")
+// listHead is every line above the tag list: header, blank separator and the
+// live banners, including both destructive-confirmation bars.
+func (m tagModel) listHead() []string {
+	l := m.lay.norm()
+
+	meta := i18n.Tf("meta.tags", len(m.tags))
+	if pos := m.position(); pos != "" {
+		meta += "  " + pos
+	}
+	lines := []string{header(l, "tag", "", meta), ""}
 
 	if m.confirmDelete && m.cursor < len(m.tags) {
-		sb.WriteString(style.Failure.Render(
-			i18n.Tf("tag.delete_confirm", m.tags[m.cursor].Name),
-		) + "\n")
-		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
+		prompt := i18n.Tf("tag.delete_confirm", m.tags[m.cursor].Name)
+		lines = append(lines, splitLines(confirmBar(l, prompt))...)
+		lines = append(lines, "")
 	}
 	if m.confirmRemoteDelete && m.cursor < len(m.tags) {
-		sb.WriteString(style.Failure.Render(
-			i18n.Tf("tag.remote_delete_confirm", m.tags[m.cursor].Name),
-		) + "\n")
-		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
+		prompt := i18n.Tf("tag.remote_delete_confirm", m.tags[m.cursor].Name)
+		lines = append(lines, splitLines(confirmBar(l, prompt))...)
+		lines = append(lines, "")
 	}
-	if m.errMsg != "" {
-		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
+	if b := banner(l, bannerError, m.errMsg); b != "" {
+		lines = append(lines, b, "")
 	}
-	if m.successMsg != "" {
-		sb.WriteString(style.Success.Render("✓ "+m.successMsg) + "\n\n")
+	if b := banner(l, bannerSuccess, m.successMsg); b != "" {
+		lines = append(lines, b, "")
+	}
+	return lines
+}
+
+func (m tagModel) viewList() string {
+	l := m.lay.norm()
+	hints := tagListHints()
+	head := strings.Join(m.listHead(), "\n")
+	foot := footer(l, hints, true)
+
+	if m.helpOpen {
+		return frameFull(l, head, helpOverlay(l, hints), foot)
 	}
 
 	if len(m.tags) == 0 {
-		sb.WriteString(style.Dimmed.Render(i18n.T("tag.none")) + "\n")
-		return sb.String()
+		body := style.MetaDim.Render(i18n.T("tag.none"))
+		return frameFull(l, head, style.Truncate(body, l.Width), foot)
 	}
 
-	for i, t := range m.tags {
-		kind := "lw"
-		if t.Annotated {
-			kind = "annot"
-		}
-		row := tagNameStyle.Render(t.Name) + " " +
-			tagKindStyle.Render("["+kind+"]") + " " +
-			tagHashStyle.Render(t.TargetHash) + " " +
-			tagDateStyle.Render(t.Date) + " " +
-			tagMsgStyle.Render(t.Subject)
-
-		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + selRowBg.Render(row) + "\n")
-		} else {
-			sb.WriteString("  " + row + "\n")
-		}
+	w := m.window()
+	start, end := w.bounds()
+	var lines []string
+	for i := start; i < end; i++ {
+		lines = append(lines, row(l, i == w.Cursor, tagLine(m.tags[i])))
 	}
+	return frameFull(l, head, strings.Join(lines, "\n"), foot)
+}
 
-	return sb.String()
+// tagLine renders one tag as name, kind, target hash, date and subject.
+func tagLine(t git.TagEntry) string {
+	kind := "lw"
+	if t.Annotated {
+		kind = "annot"
+	}
+	return style.Ref.Render(t.Name) + " " +
+		style.AuthorName.Render("["+kind+"]") + " " +
+		style.Hash.Render(t.TargetHash) + " " +
+		style.Date.Render(t.Date) + " " +
+		style.Subject.Render(t.Subject)
 }
 
 func (m tagModel) viewShow() string {
-	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito tag  ›  show") + "\n")
+	l := m.lay.norm()
+
+	summary := ""
 	if m.cursor < len(m.tags) {
 		t := m.tags[m.cursor]
-		sb.WriteString(tagNameStyle.Render(t.Name) + "  " + tagMsgStyle.Render(t.Subject))
+		summary = style.Ref.Render(t.Name) + "  " + style.Subject.Render(t.Subject)
 	}
-	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
+	head := strings.Join([]string{
+		header(l, "tag", i18n.T("key.detail"), m.position()),
+		style.Truncate(summary, l.Width),
+		"",
+	}, "\n")
+	foot := footer(l, scrollHints(), false)
 
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
-		return sb.String()
+		return frameFull(l, head, style.MetaDim.Render("  "+i18n.T("common.loading")), foot)
 	}
-	sb.WriteString(m.vp.View())
-	return sb.String()
+	return frameFull(l, head, m.vp.View(), foot)
 }
 
 func (m tagModel) viewCreate() string {
-	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito tag  ›  create") + "\n\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("tag.create_on_head")) + "\n\n")
+	l := m.lay.norm()
 
-	nameLabel := style.Label.Render("Name:    ")
-	msgLabel := style.Label.Render("Message: ")
+	head := header(l, "tag", i18n.T("key.create"), "") + "\n"
+	foot := footer(l, tagCreateHints(), false)
+
+	labelW := tagLabelWidth()
+	nameLabel := style.Pad(i18n.T("tag.field_name")+":", labelW)
+	msgLabel := style.Pad(i18n.T("tag.field_message")+":", labelW)
 	if m.createIdx == 0 {
-		nameLabel = style.Selected.Render("Name:")
+		nameLabel, msgLabel = style.Badge.Render(nameLabel), style.Label.Render(msgLabel)
 	} else {
-		msgLabel = style.Selected.Render("Message:")
-	}
-	sb.WriteString(nameLabel + " " + m.nameInput.View() + "\n\n")
-	sb.WriteString(msgLabel + " " + m.msgInput.View() + "\n\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("tag.create_note")) + "\n")
-
-	if m.errMsg != "" {
-		sb.WriteString("\n" + style.Failure.Render("! "+m.errMsg) + "\n")
+		nameLabel, msgLabel = style.Label.Render(nameLabel), style.Badge.Render(msgLabel)
 	}
 
-	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("tag.hint_create")))
-	return sb.String()
+	lines := []string{
+		style.Truncate(style.MetaDim.Render(i18n.T("tag.create_on_head")), l.Width),
+		"",
+		style.Truncate(nameLabel+" "+m.nameInput.View(), l.Width),
+		"",
+		style.Truncate(msgLabel+" "+m.msgInput.View(), l.Width),
+		"",
+		style.Truncate(style.MetaDim.Render(i18n.T("tag.create_note")), l.Width),
+	}
+	if b := banner(l, bannerError, m.errMsg); b != "" {
+		lines = append(lines, "", b)
+	}
+	return frameFull(l, head, strings.Join(lines, "\n"), foot)
 }
 
 // ── RunTag ───────────────────────────────────────────────────────────────────
@@ -424,7 +516,10 @@ func RunTag() {
 	m := tagModel{
 		nameInput: name,
 		msgInput:  msg,
+		lay:       newLayout(),
 	}
+	m.fitFormWidth()
+
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

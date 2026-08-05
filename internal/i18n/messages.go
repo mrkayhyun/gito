@@ -101,6 +101,8 @@ var en = map[string]string{
 	"tag.deleted_origin":        "Deleted %s on origin",
 	"tag.pushed":                "Pushed %s to origin",
 	"tag.ph_msg":                "optional annotation message",
+	"tag.field_name":            "Name",
+	"tag.field_message":         "Message",
 
 	// ── reflog (reflog.go) ─────────────────────────────────────────────────
 	"reflog.target":          "Target: ",
@@ -148,6 +150,11 @@ var en = map[string]string{
 	"status.clean":           "  Nothing to commit, working tree clean",
 	"status.untracked_note":  "(untracked — not yet staged)",
 	"status.no_diff":         "(no diff)",
+
+	// Section headings, also used as the header badge labels.
+	"status.section_staged":    "Staged",
+	"status.section_unstaged":  "Unstaged",
+	"status.section_untracked": "Untracked",
 
 	// ── blame (blame.go) ───────────────────────────────────────────────────
 	"blame.hint_pick":  "↑/↓: move   enter: view blame   esc: quit",
@@ -198,6 +205,12 @@ var en = map[string]string{
 	"key.amend":         "amend",
 	"key.edit":          "edit",
 	"help.keys_title":   "Keys",
+
+	// ── header meta counts (chrome.go) ─────────────────────────────────────
+	"meta.commits": "%d commits",
+	"meta.stashes": "%d stashes",
+	"meta.tags":    "%d tags",
+	"meta.files":   "%d files",
 
 	// ── shared ─────────────────────────────────────────────────────────────
 	"common.search":     "Search: ",
@@ -300,6 +313,8 @@ var ko = map[string]string{
 	"tag.deleted_origin":        "origin에서 %s 삭제됨",
 	"tag.pushed":                "origin으로 %s push됨",
 	"tag.ph_msg":                "주석 메시지 (선택)",
+	"tag.field_name":            "이름",
+	"tag.field_message":         "메시지",
 
 	"reflog.target":          "대상: ",
 	"reflog.new_branch_name": "이 지점을 가리키는 새 브랜치 이름:",
@@ -341,6 +356,10 @@ var ko = map[string]string{
 	"status.clean":           "  커밋할 내용이 없습니다. 작업 트리가 깨끗합니다",
 	"status.untracked_note":  "(추적 안 됨 — 아직 스테이징되지 않음)",
 	"status.no_diff":         "(diff 없음)",
+
+	"status.section_staged":    "스테이지됨",
+	"status.section_unstaged":  "스테이지 안 됨",
+	"status.section_untracked": "추적 안 됨",
 
 	"blame.hint_pick":  "↑/↓: 이동   enter: blame 보기   esc: 종료",
 	"blame.none":       "  파일을 찾을 수 없습니다",
@@ -387,6 +406,11 @@ var ko = map[string]string{
 	"key.amend":         "수정",
 	"key.edit":          "편집",
 	"help.keys_title":   "키",
+
+	"meta.commits": "커밋 %d개",
+	"meta.stashes": "스태시 %d개",
+	"meta.tags":    "태그 %d개",
+	"meta.files":   "파일 %d개",
 
 	"common.search":     "검색: ",
 	"common.confirm_yn": "y: 확인   다른 키: 취소",
@@ -487,6 +511,8 @@ var ja = map[string]string{
 	"tag.deleted_origin":        "origin の %s を削除しました",
 	"tag.pushed":                "%s を origin に push しました",
 	"tag.ph_msg":                "注釈メッセージ (任意)",
+	"tag.field_name":            "名前",
+	"tag.field_message":         "メッセージ",
 
 	"reflog.target":          "対象: ",
 	"reflog.new_branch_name": "この地点を指す新しいブランチ名:",
@@ -528,6 +554,10 @@ var ja = map[string]string{
 	"status.clean":           "  コミットする内容はありません。作業ツリーはクリーンです",
 	"status.untracked_note":  "(未追跡 — まだステージされていません)",
 	"status.no_diff":         "(diff なし)",
+
+	"status.section_staged":    "ステージ済み",
+	"status.section_unstaged":  "未ステージ",
+	"status.section_untracked": "未追跡",
 
 	"blame.hint_pick":  "↑/↓: 移動   enter: blame 表示   esc: 終了",
 	"blame.none":       "  ファイルが見つかりません",
@@ -574,6 +604,11 @@ var ja = map[string]string{
 	"key.amend":         "修正",
 	"key.edit":          "編集",
 	"help.keys_title":   "キー",
+
+	"meta.commits": "コミット %d 件",
+	"meta.stashes": "スタッシュ %d 件",
+	"meta.tags":    "タグ %d 件",
+	"meta.files":   "ファイル %d 件",
 
 	"common.search":     "検索: ",
 	"common.confirm_yn": "y: 確定   他キー: キャンセル",
@@ -674,6 +709,8 @@ var zh = map[string]string{
 	"tag.deleted_origin":        "已在 origin 上删除 %s",
 	"tag.pushed":                "已将 %s 推送到 origin",
 	"tag.ph_msg":                "注释消息（可选）",
+	"tag.field_name":            "名称",
+	"tag.field_message":         "消息",
 
 	"reflog.target":          "目标: ",
 	"reflog.new_branch_name": "指向此处的新分支名称：",
@@ -715,6 +752,10 @@ var zh = map[string]string{
 	"status.clean":           "  没有需要提交的内容，工作区是干净的",
 	"status.untracked_note":  "(未跟踪 — 尚未暂存)",
 	"status.no_diff":         "(无差异)",
+
+	"status.section_staged":    "已暂存",
+	"status.section_unstaged":  "未暂存",
+	"status.section_untracked": "未跟踪",
 
 	"blame.hint_pick":  "↑/↓: 移动   enter: 查看 blame   esc: 退出",
 	"blame.none":       "  未找到文件",
@@ -761,6 +802,11 @@ var zh = map[string]string{
 	"key.amend":         "修正",
 	"key.edit":          "编辑",
 	"help.keys_title":   "按键",
+
+	"meta.commits": "%d 个提交",
+	"meta.stashes": "%d 个贮藏",
+	"meta.tags":    "%d 个标签",
+	"meta.files":   "%d 个文件",
 
 	"common.search":     "搜索: ",
 	"common.confirm_yn": "y: 确认   其他键: 取消",

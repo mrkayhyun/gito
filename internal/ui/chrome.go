@@ -207,6 +207,26 @@ func renderHint(h keyHint) string {
 	return style.KeyCap.Render(keys) + " " + style.KeyDesc.Render(desc)
 }
 
+// moveHint is the up/down navigation hint every list pane shows. The arrows
+// come from the glyph table so an ASCII terminal gets "^/v j/k".
+func moveHint() keyHint {
+	return keyHint{Keys: style.G.Up + "/" + style.G.Down + " j/k", Desc: i18n.T("key.move")}
+}
+
+// scrollHints are the hints of every viewport pane: scroll, page and back.
+func scrollHints() []keyHint {
+	return []keyHint{
+		{Keys: style.G.Up + "/" + style.G.Down + " j/k", Desc: i18n.T("key.scroll")},
+		{Keys: "PgUp/PgDn", Desc: i18n.T("key.page")},
+		{Keys: "q/esc", Desc: i18n.T("key.back")},
+	}
+}
+
+// quitHint closes a list pane's footer.
+func quitHint() keyHint {
+	return keyHint{Keys: "q/esc", Desc: i18n.T("key.quit")}
+}
+
 // helpOverlay renders the full hint list as an aligned two-column table inside
 // a bordered box, titled with help.keys_title. This is where the long hint
 // sentences that used to hard-wrap on an 80-column terminal now live.
