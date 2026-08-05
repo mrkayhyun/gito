@@ -53,16 +53,31 @@ func hasMoreNote(plain string) bool {
 	return false
 }
 
-// borderLines counts the lines of a view that consist only of ASCII box drawing,
-// which is how these tests tell a closed overlay box from a cut-open one.
-func borderLines(view string) int {
-	n := 0
-	for _, line := range strings.Split(stripSGR(view), "\n") {
+// boxRows reports how many content lines an ASCII-bordered overlay box drew,
+// counting the lines between its two border lines. That count is the row budget
+// helpOverlay was given whenever the table did not fit it, which is what lets
+// these tests assert one exact outcome per budget instead of accepting either of
+// two. It returns 0 for a borderless table - what a budget below three rows
+// renders - and -1 for the half-open box a frame that cut the overlay used to
+// leave behind.
+func boxRows(view string) int {
+	borders, first, last := 0, -1, -1
+	for i, line := range strings.Split(stripSGR(view), "\n") {
 		if strings.Contains(line, "+") && strings.Trim(line, "+-") == "" {
-			n++
+			borders++
+			if first < 0 {
+				first = i
+			}
+			last = i
 		}
 	}
-	return n
+	switch borders {
+	case 0:
+		return 0
+	case 1:
+		return -1
+	}
+	return last - first - 1
 }
 
 // ── resize while a confirmation is armed ─────────────────────────────────────
@@ -210,18 +225,29 @@ func TestResizeWhileHelpOverlayIsOpen(t *testing.T) {
 					t.Fatalf("overlay view is %d lines, want exactly %d", n, s.h)
 				}
 				plain := stripSGR(view)
-				// The title survives every budget but the smallest one, where its
-				// single row goes to the "+N more" note instead: a titled empty
-				// box - what 20x6 used to render - tells the user nothing.
-				if !strings.Contains(plain, style.Truncate(title, s.w)) && !hasMoreNote(plain) {
-					t.Errorf("the resized overlay shows neither its title %q nor a hidden-hint count:\n%s",
-						title, plain)
-				}
 
-				// Either a closed box, or - when the pane's own head leaves less
-				// than three rows - a borderless table. Never a half-open box.
-				if borders := borderLines(view); borders == 1 {
-					t.Errorf("the overlay box was cut open by the frame:\n%s", plain)
+				// The expectation is exact rather than "title or count": the
+				// title survives every budget above one row, and only at the
+				// one-row floor does its single row go to the "+N more" note
+				// instead, because a titled empty box - what 20x6 used to
+				// render - tells the user nothing. The budget is read back from
+				// the box the overlay drew rather than restated from each pane's
+				// chrome, which varies with the banners the head carries.
+				switch rows := boxRows(view); {
+				case rows < 0:
+					// A half-open box means the frame cut the overlay, which is
+					// what a short terminal used to get.
+					t.Fatalf("the overlay box was cut open by the frame:\n%s", plain)
+				case rows <= 1:
+					// Either the one-row floor or the borderless table below
+					// three rows - remote's upstream banner leaves that little
+					// at 20x6. Both drop hints, so both must count them.
+					if !hasMoreNote(plain) {
+						t.Errorf("the overlay does not say how many hints it hid:\n%s", plain)
+					}
+				case !strings.Contains(plain, style.Truncate(title, s.w)):
+					t.Errorf("the overlay dropped its title %q at a budget of %d rows:\n%s",
+						title, rows, plain)
 				}
 			})
 		}
@@ -263,9 +289,22 @@ func TestHelpOverlayFitsTheRowsItIsGiven(t *testing.T) {
 				}
 			}
 			plain := stripSGR(box)
-			if !strings.Contains(plain, i18n.T("help.keys_title")) && !hasMoreNote(plain) {
-				t.Errorf("the overlay at %d rows shows neither its title nor a hidden-hint count:\n%s",
-					rows, plain)
+
+			// The budget is what the box has left for content after its two
+			// border rows, and the expectation for it is exact: the title above
+			// one row, the "+N more" note at the one-row floor where the title
+			// would leave an empty box behind.
+			budget := rows
+			if rows >= 3 {
+				budget = rows - 2
+			}
+			if budget > 1 {
+				if !strings.Contains(plain, i18n.T("help.keys_title")) {
+					t.Errorf("the overlay at %d rows (a budget of %d) dropped its title:\n%s",
+						rows, budget, plain)
+				}
+			} else if !hasMoreNote(plain) {
+				t.Errorf("the overlay at %d rows does not say how many hints it hid:\n%s", rows, plain)
 			}
 
 			// Every hint fits at 24 rows; below that the tail is replaced by a
@@ -287,7 +326,10 @@ func TestHelpOverlayFitsTheRowsItIsGiven(t *testing.T) {
 			}
 			// Whatever the budget - including the one-row floor, where the note
 			// is all there is room for - the count of hidden hints is on screen.
-			if hidden := len(hints) - shown; !strings.Contains(plain, fmt.Sprintf("%d", hidden)) {
+			// The note is matched as the catalogue renders it, so a hint whose
+			// own text happens to carry the digit cannot stand in for it, and the
+			// check still holds in every locale.
+			if hidden := len(hints) - shown; !strings.Contains(plain, i18n.Tf("help.more", hidden)) {
 				t.Errorf("the overlay hid %d hint(s) without saying so:\n%s", hidden, plain)
 			}
 		})

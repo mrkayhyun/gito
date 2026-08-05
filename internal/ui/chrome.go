@@ -47,8 +47,12 @@ func (l layout) resize(w, h int) layout {
 }
 
 // norm makes a zero-value layout behave like newLayout, so a model that has
-// not been resized yet still measures 80x24. Every primitive below normalizes
-// its layout first.
+// not been resized yet still measures 80x24, and clamps whatever it is given up
+// to the 20x6 floor. Every primitive below normalizes its layout first with one
+// deliberate exception: row() takes its width as given, because clamping up to
+// minCols there would undo the column listLayout reserves for the scrollbar on
+// a 20-column terminal. row()'s callers must therefore hand it the layout
+// listLayout returned, never a raw one.
 func (l layout) norm() layout {
 	if l.Width <= 0 {
 		l.Width = defaultCols
@@ -382,7 +386,6 @@ func row(l layout, selected bool, content string) string {
 	if width <= 0 {
 		width = defaultCols
 	}
-	width = max(width, 1)
 
 	gutter := "  "
 	if selected {
