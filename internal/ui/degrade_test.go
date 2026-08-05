@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"gito/internal/git"
 	"gito/internal/i18n"
 	"gito/internal/style"
 )
@@ -38,6 +39,18 @@ func countListRows(view, marker string) int {
 		}
 	}
 	return n
+}
+
+// hasMoreNote reports whether a view carries the overlay's "+N more" note for
+// any plausible count. It is built from the message catalogue rather than a
+// literal so the check holds in every locale.
+func hasMoreNote(plain string) bool {
+	for hidden := 1; hidden <= 40; hidden++ {
+		if strings.Contains(plain, i18n.Tf("help.more", hidden)) {
+			return true
+		}
+	}
+	return false
 }
 
 // borderLines counts the lines of a view that consist only of ASCII box drawing,
@@ -197,8 +210,12 @@ func TestResizeWhileHelpOverlayIsOpen(t *testing.T) {
 					t.Fatalf("overlay view is %d lines, want exactly %d", n, s.h)
 				}
 				plain := stripSGR(view)
-				if !strings.Contains(plain, style.Truncate(title, s.w)) {
-					t.Errorf("the resized overlay lost its title %q", title)
+				// The title survives every budget but the smallest one, where its
+				// single row goes to the "+N more" note instead: a titled empty
+				// box - what 20x6 used to render - tells the user nothing.
+				if !strings.Contains(plain, style.Truncate(title, s.w)) && !hasMoreNote(plain) {
+					t.Errorf("the resized overlay shows neither its title %q nor a hidden-hint count:\n%s",
+						title, plain)
 				}
 
 				// Either a closed box, or - when the pane's own head leaves less
@@ -245,15 +262,17 @@ func TestHelpOverlayFitsTheRowsItIsGiven(t *testing.T) {
 					t.Fatalf("the box is not closed - border line is %q:\n%s", border, stripSGR(box))
 				}
 			}
-			if !strings.Contains(stripSGR(box), i18n.T("help.keys_title")) {
-				t.Errorf("the overlay lost its title at %d rows", rows)
+			plain := stripSGR(box)
+			if !strings.Contains(plain, i18n.T("help.keys_title")) && !hasMoreNote(plain) {
+				t.Errorf("the overlay at %d rows shows neither its title nor a hidden-hint count:\n%s",
+					rows, plain)
 			}
 
 			// Every hint fits at 24 rows; below that the tail is replaced by a
 			// note that says how many are hidden.
 			shown := 0
 			for _, h := range hints {
-				if strings.Contains(stripSGR(box), h.Desc) {
+				if strings.Contains(plain, h.Desc) {
 					shown++
 				}
 			}
@@ -266,9 +285,10 @@ func TestHelpOverlayFitsTheRowsItIsGiven(t *testing.T) {
 			if shown == len(hints) {
 				t.Errorf("a %d-row budget shows every hint; it cannot fit", rows)
 			}
-			if hidden := len(hints) - shown; rows > 3 &&
-				!strings.Contains(stripSGR(box), fmt.Sprintf("%d", hidden)) {
-				t.Errorf("the overlay hid %d hint(s) without saying so:\n%s", hidden, stripSGR(box))
+			// Whatever the budget - including the one-row floor, where the note
+			// is all there is room for - the count of hidden hints is on screen.
+			if hidden := len(hints) - shown; !strings.Contains(plain, fmt.Sprintf("%d", hidden)) {
+				t.Errorf("the overlay hid %d hint(s) without saying so:\n%s", hidden, plain)
 			}
 		})
 	}
@@ -353,4 +373,188 @@ func TestScrollbarTracksTheWindow(t *testing.T) {
 			t.Errorf("a list that fits its window still drew a scrollbar: %q", plain)
 		}
 	}
+}
+
+// statusWith builds a status model of n entries laid out the way doStatusLoad
+// lays them out: three contiguous groups in section order, so the body carries
+// one section rule per group on top of its rows. It is the one pane whose body
+// is not rows alone, which is where the scrollbar column has to be measured.
+func statusWith(n int, path func(int) string) statusModel {
+	m := statusModel{lay: layout{Width: 80, Height: 24}}
+	secs := []statusSection{secStaged, secUnstaged, secUntracked}
+	for i := 0; i < max(n, 0); i++ {
+		sec := secs[i*len(secs)/max(n, 1)]
+		f := git.FileStatus{Staged: 'M', Unstaged: ' ', Path: path(i)}
+		switch sec {
+		case secUnstaged:
+			f.Staged, f.Unstaged = ' ', 'M'
+		case secUntracked:
+			f.Staged, f.Unstaged = '?', '?'
+		}
+		m.entries = append(m.entries, statusEntry{file: f, section: sec})
+	}
+	return m
+}
+
+// scanBar reports, over the body lines of a framed view, the first and last line
+// the thumb covers and the last line carrying any scrollbar cell at all. The
+// blank lines frameFull pads a short body with carry none, so the last cell is
+// the bottom of the track rather than the bottom of the pane.
+func scanBar(view string, headLines int) (firstThumb, lastThumb, lastCell int) {
+	firstThumb, lastThumb, lastCell = -1, -1, -1
+	for i, line := range bodyLines(view, headLines) {
+		switch plain := stripSGR(line); {
+		case strings.HasSuffix(plain, style.G.ScrollThumb):
+			if firstThumb < 0 {
+				firstThumb = i
+			}
+			lastThumb, lastCell = i, i
+		case strings.HasSuffix(plain, style.G.ScrollTrack):
+			lastCell = i
+		}
+	}
+	return firstThumb, lastThumb, lastCell
+}
+
+// TestScrollbarOnAnInterleavedBody drives the scrollbar on status, whose body
+// mixes section rules into its rows. The rules stretch the track without
+// belonging to the window, so folding them into the row count both silenced the
+// bar for a list barely longer than its window - 19 to 21 changed files over
+// three sections at 80x24 - and sized the thumb against lines rather than
+// entries, which pinned it to the bottom after a single 'j'.
+func TestScrollbarOnAnInterleavedBody(t *testing.T) {
+	restore := style.UseASCII(false)
+	defer restore()
+
+	const w, h = 80, 24
+	const headLines = 2 // header + blank separator
+
+	for _, n := range []int{19, 20, 21, 22, 25, 40, 200} {
+		t.Run(fmt.Sprintf("%d entries", n), func(t *testing.T) {
+			paths := func(i int) string { return fmt.Sprintf("dir/file-%03d.go", i) }
+
+			resized, _ := statusWith(n, paths).Update(tea.WindowSizeMsg{Width: w, Height: h})
+			top := resized.View()
+			sm := resized.(statusModel)
+			if !sm.window().scrolls() {
+				t.Fatalf("%d entries do not scroll in %d rows; pick a bigger list", n, sm.listRows())
+			}
+
+			body := bodyLines(top, headLines)
+			cells := 0
+			for i, line := range body {
+				plain := stripSGR(line)
+				if plain == "" {
+					continue // frameFull's padding below the last line
+				}
+				if got := widthOf(line); got != w {
+					t.Fatalf("body line %d is %d columns wide, want exactly %d: %q", i, got, w, plain)
+				}
+				if !strings.HasSuffix(plain, style.G.ScrollThumb) &&
+					!strings.HasSuffix(plain, style.G.ScrollTrack) {
+					t.Fatalf("body line %d has a reserved but empty scrollbar column: %q", i, plain)
+				}
+				cells++
+			}
+
+			first, last, _ := scanBar(top, headLines)
+			if first != 0 {
+				t.Errorf("with the cursor at the top the thumb starts on body line %d, want 0", first)
+			}
+			if last-first+1 >= cells {
+				t.Errorf("the thumb covers all %d cells of the track; %d entries in %d rows is not the whole list",
+					cells, n, sm.listRows())
+			}
+			// The thumb is the window's share of the LIST - rows of entries -
+			// stretched over the track, not the body's share of its own lines:
+			// counting the section rules as rows made it read nearly full height.
+			if size, want := last-first+1, max(cells*sm.listRows()/n, 1); size > want+1 {
+				t.Errorf("the thumb covers %d of %d cells for %d entries in %d rows, want about %d",
+					size, cells, n, sm.listRows(), want)
+			}
+
+			// One 'j' does not scroll the window, so the thumb must not reach the
+			// bottom of the track either.
+			moved, _ := resized.Update(keyMsg("j"))
+			if _, movedLast, movedCell := scanBar(moved.View(), headLines); movedLast == movedCell {
+				t.Errorf("the thumb hit the bottom of the track after a single 'j' with %d entries", n)
+			}
+
+			// Scrolled to the end it does reach the bottom of the track, which is
+			// the last line carrying a cell rather than the last line of the pane.
+			end := statusWith(n, paths)
+			end.cursor = n - 1
+			scrolled, _ := end.Update(tea.WindowSizeMsg{Width: w, Height: h})
+			if _, endLast, endCell := scanBar(scrolled.View(), headLines); endLast != endCell {
+				t.Errorf("with the cursor at the end the thumb ends on body line %d, want the track's last (%d)",
+					endLast, endCell)
+			}
+		})
+	}
+}
+
+// ── list content at the column floor ─────────────────────────────────────────
+
+// TestListRowsAtTheColumnFloorKeepTheirContent goes to the 20-column floor the
+// README documents and looks at what the rows SAY, not just how wide they are:
+// reserving the scrollbar column used to be undone by row()'s normalization and
+// cut back by listBody, which spent the last column of every row on an ellipsis
+// even when the content was three characters long.
+func TestListRowsAtTheColumnFloorKeepTheirContent(t *testing.T) {
+	restore := style.UseASCII(false) // the real "…" tail, not its ASCII stand-in
+	defer restore()
+
+	t.Run("primitives", func(t *testing.T) {
+		l := newLayout().resize(minCols, minRows)
+		w := listWindow{Cursor: 0, Total: 50, Rows: 3}
+		rl := listLayout(l, w)
+		if rl.Width != l.Width-1 {
+			t.Fatalf("listLayout reserved %d of %d columns, want one for the bar", rl.Width, l.Width)
+		}
+
+		lines := []string{row(rl, true, "ok"), row(rl, false, "ok")}
+		for i, line := range strings.Split(listBody(l, w, lines), "\n") {
+			plain := stripSGR(line)
+			if got := widthOf(line); got != l.Width {
+				t.Errorf("row %d is %d columns wide, want exactly %d: %q", i, got, l.Width, plain)
+			}
+			if !strings.Contains(plain, "ok") {
+				t.Errorf("row %d lost its content: %q", i, plain)
+			}
+			if strings.Contains(plain, style.G.Ellipsis) {
+				t.Errorf("row %d was truncated although %q fits %d columns: %q",
+					i, "ok", rl.Width, plain)
+			}
+		}
+	})
+
+	t.Run("status at the floor", func(t *testing.T) {
+		m := statusWith(30, func(i int) string { return fmt.Sprintf("f%d.go", i) })
+		resized, _ := m.Update(tea.WindowSizeMsg{Width: minCols, Height: minRows})
+		view := resized.View()
+
+		if n := lineCount(view); n != minRows {
+			t.Fatalf("the floor view is %d lines, want exactly %d", n, minRows)
+		}
+		seen := false
+		for i, line := range bodyLines(view, 2) {
+			plain := stripSGR(line)
+			if plain == "" {
+				continue
+			}
+			seen = true
+			if got := widthOf(line); got != minCols {
+				t.Errorf("body line %d is %d columns wide, want exactly %d: %q", i, got, minCols, plain)
+			}
+			if strings.Contains(plain, style.G.Ellipsis) {
+				t.Errorf("body line %d carries an ellipsis although its content fits: %q", i, plain)
+			}
+		}
+		if !seen {
+			t.Fatal("no list content at the column floor")
+		}
+		if !strings.Contains(stripSGR(view), "f0.go") {
+			t.Error("the floor view dropped the file name of its only visible row")
+		}
+	})
 }

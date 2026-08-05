@@ -294,14 +294,18 @@ func helpOverlay(l layout, rows int, hints []keyHint) string {
 		budget = rows - 2
 	}
 	if budget = max(budget, 1); len(lines) > budget {
-		if budget == 1 {
-			lines = lines[:1]
-		} else {
-			keep := budget - 1
-			hidden := len(lines) - keep
-			lines = append(lines[:keep:keep],
-				style.Truncate(style.MetaDim.Render(i18n.Tf("help.more", hidden)), inner))
+		// keep is how many of the lines built above survive; the last row of the
+		// budget always goes to the note. At a budget of one that leaves nothing
+		// for the title, and the note is the more valuable of the two: a titled
+		// empty box (what a 20x6 terminal used to get) reads as broken, while
+		// "+N more" tells the user the hints are there but do not fit.
+		keep := budget - 1
+		hidden := len(lines) - keep
+		if keep == 0 {
+			hidden = len(lines) - 1 // the title is not a hidden hint
 		}
+		lines = append(lines[:keep:keep],
+			style.Truncate(style.MetaDim.Render(i18n.Tf("help.more", hidden)), inner))
 	}
 	if !boxed {
 		return strings.Join(lines, "\n")
@@ -362,17 +366,29 @@ func confirmBar(l layout, prompt string) string {
 
 // ── rows and scrolling ─────────────────────────────────────────────────────
 
-// row renders one list line across the FULL layout width: the Cursor glyph in
-// the gutter when selected, and the selected-row background painted edge to
-// edge so the highlight is never ragged. content may already be styled and may
-// contain ANSI escapes; it is measured and cut by display width.
+// row renders one list line across the FULL width of the layout it is given:
+// the Cursor glyph in the gutter when selected, and the selected-row background
+// painted edge to edge so the highlight is never ragged. content may already be
+// styled and may contain ANSI escapes; it is measured and cut by display width.
+//
+// The width is taken as given rather than through norm(), which clamps up to
+// minCols: listLayout deliberately hands rows one column less than the terminal
+// to reserve the scrollbar gutter, and at a 20-column terminal that reservation
+// would otherwise be undone here and cut back by listBody - landing an ellipsis
+// in the blank padding of rows whose content is short. Only the zero value is
+// filled in, so a model that has not been resized yet still measures 80.
 func row(l layout, selected bool, content string) string {
-	l = l.norm()
+	width := l.Width
+	if width <= 0 {
+		width = defaultCols
+	}
+	width = max(width, 1)
+
 	gutter := "  "
 	if selected {
 		gutter = style.G.Cursor + " "
 	}
-	line := style.Pad(style.Truncate(gutter+oneLine(content), l.Width), l.Width)
+	line := style.Pad(style.Truncate(gutter+oneLine(content), width), width)
 	if selected {
 		// style.SelectRow, not RowSel.Render: content arrives pre-styled and a
 		// plain Render would let the first cell's reset clear the background for
@@ -452,17 +468,29 @@ func (w listWindow) scrolls() bool {
 // Screens do not call this directly: listLayout and listBody below are the pair
 // that reserves the column and fills it.
 func (w listWindow) scrollbar(visible int) string {
+	return w.scrollbarOver(visible, max(w.clamp().Rows, 1))
+}
+
+// scrollbarOver is scrollbar for a body that renders track lines for its Rows
+// entries, which is what status does: it draws a section rule per group, so its
+// body is taller than the window the rules sit in. The track is stretched over
+// those lines while the thumb keeps the WINDOW's scale, Rows out of Total, and
+// the "everything fits" test stays the one scrolls() and listLayout agree on -
+// folding the extra lines into Rows instead would both silence the bar (Total
+// <= Rows) and size the thumb against a row count nobody scrolls through.
+func (w listWindow) scrollbarOver(visible, track int) string {
 	c := w.clamp()
 	rows := max(c.Rows, 1)
-	if c.Total <= rows || visible < 0 || visible >= rows {
+	track = max(track, 1)
+	if c.Total <= rows || visible < 0 || visible >= track {
 		return " "
 	}
 	// The thumb is sized by the fraction of the list on screen and positioned by
 	// mapping the scrollable range [0, Total-Rows] onto the track it can move
-	// along, [0, Rows-size], so it touches the top and the bottom exactly when
+	// along, [0, track-size], so it touches the top and the bottom exactly when
 	// the list does.
-	size := max(rows*rows/c.Total, 1)
-	span := max(rows-size, 0)
+	size := max(track*rows/c.Total, 1)
+	span := max(track-size, 0)
 	start := 0
 	if scrollable := c.Total - rows; scrollable > 0 {
 		start = min(c.Offset*span/scrollable, span)
@@ -492,19 +520,19 @@ func listLayout(l layout, w listWindow) layout {
 // Cell i belongs to line i and every line is padded to the reserved width
 // first, which is what keeps the column straight on panes that interleave lines
 // that are not rows: status draws an unpadded section rule per group. Those
-// extra lines are also why the bar is measured against the number of lines
-// rendered rather than the window's row count.
+// extra lines stretch the track the thumb runs along - scrollbarOver's track
+// argument - without changing the window's scale, so a body of 21 lines showing
+// 18 of 21 entries still gets a bar, and a thumb sized 18/21 rather than 21/21.
 func listBody(l layout, w listWindow, lines []string) string {
 	if !w.scrolls() {
 		return strings.Join(lines, "\n")
 	}
 	width := max(l.norm().Width-1, 1)
 	bar := w.clamp()
-	bar.Rows = max(bar.Rows, len(lines))
 
 	out := make([]string, len(lines))
 	for i, line := range lines {
-		out[i] = style.Pad(style.Truncate(line, width), width) + bar.scrollbar(i)
+		out[i] = style.Pad(style.Truncate(line, width), width) + bar.scrollbarOver(i, len(lines))
 	}
 	return strings.Join(out, "\n")
 }

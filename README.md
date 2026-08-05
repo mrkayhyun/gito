@@ -165,7 +165,9 @@ Running a command outside a Git repository prints a friendly hint and exits.
 - `?` opens a key-bindings overlay listing every binding of the current screen, on `status`, `log`,
   `stash`, `tag`, the `diff` ref picker, the `remote` list and the `reflog` list. `branch` and `blame`
   filter as you type and the launcher and `commit` read single keys, so those screens bind no `?`
-  and keep their hints in the footer. An armed confirmation ignores `?` until you answer it.
+  and keep their hints in the footer. An armed confirmation ignores `?` until you answer it. On a
+  terminal too short for the whole table the overlay sheds trailing hints for a `+N more` count
+  instead of being cut open.
 
 ## Configuration (optional)
 
