@@ -12,6 +12,8 @@ import (
 	"gito/internal/style"
 )
 
+// ── modes ─────────────────────────────────────────────────────────────────────
+
 type branchMode int
 
 const (
@@ -20,6 +22,8 @@ const (
 	branchModeRename
 )
 
+// ── model ─────────────────────────────────────────────────────────────────────
+
 type branchModel struct {
 	branches     []string
 	current      string
@@ -27,12 +31,14 @@ type branchModel struct {
 	input        textinput.Model // used for create / rename
 	mode         branchMode
 	cursor       int
+	offset       int // first visible row of the filtered list
 	err          error
 	done         bool
 	switched     string
 	msg          string // status message (success/info)
 	confirm      bool   // delete confirmation active
 	confirmForce bool
+	lay          layout
 }
 
 func newBranchModel(branches []string, current string) branchModel {
@@ -44,12 +50,15 @@ func newBranchModel(branches []string, current string) branchModel {
 	input := textinput.New()
 	input.CharLimit = 100
 
-	return branchModel{
+	m := branchModel{
 		branches: branches,
 		current:  current,
 		filter:   filter,
 		input:    input,
+		lay:      newLayout(),
 	}
+	m.fitFormWidth()
+	return m
 }
 
 func (m branchModel) filteredBranches() []string {
@@ -66,11 +75,22 @@ func (m branchModel) filteredBranches() []string {
 	return result
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 func (m branchModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
+// ── Update ───────────────────────────────────────────────────────────────────
+
 func (m branchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.lay = m.lay.resize(size.Width, size.Height)
+		m.fitFormWidth()
+		m.offset = m.window().Offset
+		return m, nil
+	}
+
 	keyMsg, isKey := msg.(tea.KeyMsg)
 	if !isKey {
 		var cmd tea.Cmd
@@ -86,6 +106,27 @@ func (m branchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		return m.updateList(keyMsg)
 	}
+}
+
+// listRows is how many branches fit under the header, filter and banners.
+func (m branchModel) listRows() int { return bodyRows(m.lay, len(m.listHead())+1) }
+
+// window is the scrolling state of the filtered branch list.
+func (m branchModel) window() listWindow {
+	return listWindow{
+		Cursor: m.cursor,
+		Offset: m.offset,
+		Total:  len(m.filteredBranches()),
+		Rows:   m.listRows(),
+	}.clamp()
+}
+
+// fitFormWidth keeps the filter and the create/rename field inside the
+// terminal, so a narrow window cannot make them wrap.
+func (m *branchModel) fitFormWidth() {
+	label := style.DisplayWidth(i18n.T("common.search"))
+	m.filter.Width = max(m.lay.norm().Width-label-6, 10)
+	m.input.Width = max(m.lay.norm().Width-6, 10)
 }
 
 func (m branchModel) updateInput(msg tea.KeyMsg, rename bool) (tea.Model, tea.Cmd) {
@@ -126,7 +167,7 @@ func (m branchModel) updateInput(msg tea.KeyMsg, rename bool) (tea.Model, tea.Cm
 		if gerr == nil {
 			m.branches, m.current = branches, current
 		}
-		m.cursor = 0
+		m.cursor, m.offset = 0, 0
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -137,7 +178,8 @@ func (m branchModel) updateInput(msg tea.KeyMsg, rename bool) (tea.Model, tea.Cm
 func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	filtered := m.filteredBranches()
 
-	// delete confirmation
+	// delete confirmation. Kept first and unchanged: any key that is not 'y'
+	// cancels, so nothing below can intercept a confirmation.
 	if m.confirm {
 		switch msg.String() {
 		case "y", "Y":
@@ -157,6 +199,7 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			m.offset = m.window().Offset
 			return m, nil
 		default:
 			m.confirm = false
@@ -171,11 +214,13 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.offset = m.window().Offset
 		return m, nil
 	case "down", "ctrl+n":
 		if m.cursor < len(filtered)-1 {
 			m.cursor++
 		}
+		m.offset = m.window().Offset
 		return m, nil
 	case "enter":
 		if len(filtered) > 0 {
@@ -247,10 +292,36 @@ func (m branchModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.filter, cmd = m.filter.Update(msg)
 	if m.filter.Value() != prevFilter {
-		m.cursor = 0
+		m.cursor, m.offset = 0, 0
 	}
 	return m, cmd
 }
+
+// ── hints ────────────────────────────────────────────────────────────────────
+
+// branchListHints is rendered in the footer rather than behind a '?' overlay:
+// the filter textinput consumes printable runes, so '?' is not free here. This
+// is the hint line that used to be one ~100-column i18n sentence.
+func branchListHints() []keyHint {
+	return []keyHint{
+		{Keys: "enter", Desc: i18n.T("key.switch")},
+		{Keys: "^b", Desc: i18n.T("key.create")},
+		{Keys: "^r", Desc: i18n.T("key.rename")},
+		{Keys: "^d", Desc: i18n.T("key.delete")},
+		{Keys: "^x", Desc: i18n.T("key.force_delete")},
+		arrowMoveHint(),
+		escQuitHint(),
+	}
+}
+
+func branchInputHints() []keyHint {
+	return []keyHint{
+		{Keys: "enter", Desc: i18n.T("key.confirm")},
+		{Keys: "esc", Desc: i18n.T("key.cancel")},
+	}
+}
+
+// ── View ─────────────────────────────────────────────────────────────────────
 
 func (m branchModel) View() string {
 	if m.mode == branchModeCreate || m.mode == branchModeRename {
@@ -259,70 +330,98 @@ func (m branchModel) View() string {
 	return m.viewList()
 }
 
-func (m branchModel) viewInput() string {
-	var sb strings.Builder
-	title := "gito branch  ›  create"
-	label := i18n.T("branch.new_name")
-	if m.mode == branchModeRename {
-		title = "gito branch  ›  rename"
-		label = i18n.T("branch.rename_to")
-	}
-	sb.WriteString(style.Title.Render(title) + "\n\n")
-	sb.WriteString(style.Label.Render(label) + "\n\n")
-	sb.WriteString(m.input.View() + "\n")
-	if m.err != nil {
-		sb.WriteString("\n" + style.Failure.Render("! "+m.err.Error()) + "\n")
-	}
-	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("branch.hint_confirm")))
-	return sb.String()
+// position reports "cursor/total" without depending on the visible row count.
+func (m branchModel) position() string {
+	return listWindow{Cursor: m.cursor, Total: len(m.filteredBranches()), Rows: 1}.position()
 }
 
-func (m branchModel) viewList() string {
-	var sb strings.Builder
+func (m branchModel) viewInput() string {
+	l := m.lay.norm()
 
-	sb.WriteString(style.Title.Render("gito branch") + "\n\n")
-	sb.WriteString(style.Label.Render(i18n.T("common.search")) + m.filter.View() + "\n\n")
+	crumb, label := i18n.T("key.create"), i18n.T("branch.new_name")
+	if m.mode == branchModeRename {
+		crumb, label = i18n.T("key.rename"), i18n.T("branch.rename_to")
+	}
+	head := []string{header(l, "branch", crumb, ""), ""}
+	foot := footer(l, branchInputHints(), false)
 
+	body := []string{
+		style.Truncate(style.Label.Render(label), l.Width),
+		"",
+		style.Truncate(m.input.View(), l.Width),
+	}
+	if m.err != nil {
+		body = append(body, "", banner(l, bannerError, m.err.Error()))
+	}
+	return frameInlineFit(l, head, body, foot)
+}
+
+// listHead is every line above the branch list: header, filter field, the
+// destructive-delete confirmation bar and the live banners.
+func (m branchModel) listHead() []string {
+	l := m.lay.norm()
 	filtered := m.filteredBranches()
+
+	meta := i18n.Tf("meta.branches", len(filtered))
+	if pos := m.position(); pos != "" {
+		meta += "  " + pos
+	}
+	search := style.Label.Render(i18n.T("common.search")) + m.filter.View()
+	lines := []string{
+		header(l, "branch", "", meta),
+		"",
+		style.Truncate(search, l.Width),
+		"",
+	}
 
 	if m.confirm && m.cursor < len(filtered) {
 		key := "branch.delete_confirm"
 		if m.confirmForce {
 			key = "branch.force_delete_confirm"
 		}
-		sb.WriteString(style.Failure.Render(
-			i18n.Tf(key, filtered[m.cursor]),
-		) + "\n")
-		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
+		lines = append(lines, splitLines(confirmBar(l, i18n.Tf(key, filtered[m.cursor])))...)
+		lines = append(lines, "")
 	}
 	if m.err != nil {
-		sb.WriteString(style.Failure.Render("! "+m.err.Error()) + "\n\n")
+		lines = append(lines, banner(l, bannerError, m.err.Error()), "")
 	}
 	if m.msg != "" {
-		sb.WriteString(style.Success.Render("✓ "+m.msg) + "\n\n")
+		lines = append(lines, banner(l, bannerSuccess, m.msg), "")
 	}
-
-	if len(filtered) == 0 {
-		sb.WriteString(style.Dimmed.Render(i18n.T("branch.no_branches")) + "\n")
-	} else {
-		for i, b := range filtered {
-			prefix := "  "
-			if b == m.current {
-				prefix = "* "
-			}
-			if i == m.cursor {
-				sb.WriteString(style.Selected.Render(prefix+b) + "\n")
-			} else if b == m.current {
-				sb.WriteString(style.Success.Render(prefix+b) + "\n")
-			} else {
-				sb.WriteString(style.Normal.Render(prefix+b) + "\n")
-			}
-		}
-	}
-
-	sb.WriteString("\n" + style.Dimmed.Render(i18n.T("branch.hint_list")))
-	return sb.String()
+	return lines
 }
+
+func (m branchModel) viewList() string {
+	l := m.lay.norm()
+	head := m.listHead()
+	foot := footer(l, branchListHints(), false)
+
+	filtered := m.filteredBranches()
+	if len(filtered) == 0 {
+		body := style.Truncate(style.MetaDim.Render(i18n.T("branch.no_branches")), l.Width)
+		return frameInlineFit(l, head, []string{body}, foot)
+	}
+
+	w := m.window()
+	rl := listLayout(l, w)
+	start, end := w.bounds()
+	var lines []string
+	for i := start; i < end; i++ {
+		lines = append(lines, row(rl, i == w.Cursor, branchLine(filtered[i], m.current)))
+	}
+	return frameInlineFit(l, head, splitLines(listBody(l, w, lines)), foot)
+}
+
+// branchLine renders one branch, marking the checked-out one with a leading
+// star so the current branch is recognizable even on the selected row.
+func branchLine(name, current string) string {
+	if name == current {
+		return style.Staged.Render("* " + name)
+	}
+	return "  " + style.Subject.Render(name)
+}
+
+// ── RunBranch ────────────────────────────────────────────────────────────────
 
 func RunBranch() {
 	branches, current, err := git.GetBranches()
@@ -345,6 +444,6 @@ func RunBranch() {
 		os.Exit(1)
 	}
 	if final.done {
-		fmt.Println(style.Success.Render("✓ " + i18n.T("branch.switched") + final.switched))
+		fmt.Println(style.Success.Render(style.G.Check + " " + i18n.T("branch.switched") + final.switched))
 	}
 }

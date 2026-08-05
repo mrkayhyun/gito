@@ -25,11 +25,7 @@ func main() {
 
 	// No arguments → launch the interactive command picker.
 	if len(os.Args) < 2 {
-		cmd := ui.RunMenu()
-		if cmd == "" {
-			return // user quit the menu
-		}
-		dispatch(cmd)
+		launchMenu()
 		return
 	}
 
@@ -39,17 +35,33 @@ func main() {
 	case "version", "--version", "-v":
 		fmt.Printf("gito %s\n", version)
 	case "menu":
-		if cmd := ui.RunMenu(); cmd != "" {
-			dispatch(cmd)
-		}
+		launchMenu()
 	default:
 		dispatch(os.Args[1])
+	}
+}
+
+// launchMenu shows the interactive picker and runs whatever it returns. It is
+// the other entry point that starts a screen, so it detects the terminal too;
+// `gito version` and `gito help` render nothing adaptive and stay untouched.
+func launchMenu() {
+	style.Detect()
+	if cmd := ui.RunMenu(); cmd != "" {
+		dispatch(cmd)
 	}
 }
 
 // dispatch runs a subcommand by name. All subcommands require a git repository,
 // so it verifies that first and prints a friendly message otherwise.
 func dispatch(cmd string) {
+	// Resolve the color profile and the light/dark background before anything
+	// adaptive renders, while gito still owns the terminal in cooked mode: the
+	// adaptive colors would otherwise trigger that detection lazily, during the
+	// first render of a Bubble Tea program that has taken stdin over. The two
+	// guards below already render adaptive styles, so this sits above them; it
+	// is idempotent, so launchMenu having called it first costs nothing.
+	style.Detect()
+
 	if !isKnown(cmd) {
 		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("err.unknown_command")+cmd)+"\n")
 		printHelp()

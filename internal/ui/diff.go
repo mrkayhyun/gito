@@ -7,17 +7,12 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
 	"gito/internal/i18n"
 	"gito/internal/style"
 )
 
-var (
-	refStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	refBaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
-	refTgtStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
-)
+// ── panes ─────────────────────────────────────────────────────────────────────
 
 type diffPane int
 
@@ -26,10 +21,13 @@ const (
 	diffPaneView
 )
 
+// ── model ─────────────────────────────────────────────────────────────────────
+
 // The picker selects a base ref, then a target ref, then shows base..target.
 type diffModel struct {
 	refs   []string
 	cursor int
+	offset int // first visible row of the ref list
 	pane   diffPane
 
 	base   string // selected base (empty until chosen)
@@ -38,9 +36,12 @@ type diffModel struct {
 	vp      viewport.Model
 	vpReady bool
 
-	errMsg        string
-	width, height int
+	helpOpen bool
+	errMsg   string
+	lay      layout
 }
+
+// ── messages ──────────────────────────────────────────────────────────────────
 
 type diffContentMsg struct{ content string }
 
@@ -57,19 +58,24 @@ func doDiff(base, target string) tea.Cmd {
 	}
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 func (m diffModel) Init() tea.Cmd { return nil }
+
+// ── Update ───────────────────────────────────────────────────────────────────
 
 func (m diffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		m.lay = m.lay.resize(msg.Width, msg.Height)
 		if m.vpReady {
-			m.vp.Width = msg.Width
-			m.vp.Height = m.diffVPHeight()
+			m.vp.Width = m.lay.Width
+			m.vp.Height = m.viewRows()
 		}
+		m.offset = m.window().Offset
 
 	case diffContentMsg:
-		m.vp = viewport.New(m.width, m.diffVPHeight())
+		m.vp = viewport.New(m.lay.norm().Width, m.viewRows())
 		m.vp.SetContent(msg.content)
 		m.vpReady = true
 
@@ -82,12 +88,21 @@ func (m diffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m diffModel) diffVPHeight() int {
-	h := m.height - 4
-	if h < 1 {
-		return 1
-	}
-	return h
+// viewRows is the height of the diff viewport: header, the base/target summary,
+// a blank separator and the footer come off the terminal height.
+func (m diffModel) viewRows() int { return bodyRows(m.lay, 4) }
+
+// listRows is how many refs fit under the picker header, banners included.
+func (m diffModel) listRows() int { return bodyRows(m.lay, len(m.pickHead())+1) }
+
+// window is the scrolling state of the ref list.
+func (m diffModel) window() listWindow {
+	return listWindow{
+		Cursor: m.cursor,
+		Offset: m.offset,
+		Total:  len(m.refs),
+		Rows:   m.listRows(),
+	}.clamp()
 }
 
 func (m diffModel) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -108,6 +123,17 @@ func (m diffModel) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m diffModel) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Key overlay. While it is open it owns '?', 'q' and 'esc'.
+	if m.helpOpen {
+		switch msg.String() {
+		case "?", "q", "esc":
+			m.helpOpen = false
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
@@ -117,6 +143,8 @@ func (m diffModel) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case "?":
+		m.helpOpen = true
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -144,8 +172,22 @@ func (m diffModel) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vpReady = false
 		return m, doDiff(m.base, m.target)
 	}
+	m.offset = m.window().Offset
 	return m, nil
 }
+
+// ── hints ────────────────────────────────────────────────────────────────────
+
+func diffPickHints() []keyHint {
+	return []keyHint{
+		moveHint(),
+		{Keys: "enter", Desc: i18n.T("key.select")},
+		{Keys: "esc", Desc: i18n.T("key.back")},
+		quitHint(),
+	}
+}
+
+// ── View ─────────────────────────────────────────────────────────────────────
 
 func (m diffModel) View() string {
 	if m.pane == diffPaneView {
@@ -154,52 +196,80 @@ func (m diffModel) View() string {
 	return m.viewPick()
 }
 
+// position reports "cursor/total" without depending on the visible row count.
+func (m diffModel) position() string {
+	return listWindow{Cursor: m.cursor, Total: len(m.refs), Rows: 1}.position()
+}
+
+// pickHead is every line above the ref list: the header with the 1/2 - 2/2 step
+// indicator in its meta cell, the chosen base and the error banner.
+func (m diffModel) pickHead() []string {
+	l := m.lay.norm()
+
+	meta := i18n.T("diff.step_base")
+	if m.base != "" {
+		meta = i18n.T("diff.step_target")
+	}
+	if pos := m.position(); pos != "" {
+		meta += "  " + pos
+	}
+	lines := []string{header(l, "diff", "", meta), ""}
+
+	if m.base != "" {
+		base := style.Label.Render(i18n.T("diff.label_base")) + " " + style.RefBase.Render(m.base)
+		lines = append(lines, style.Truncate(base, l.Width), "")
+	}
+	if b := banner(l, bannerError, m.errMsg); b != "" {
+		lines = append(lines, b, "")
+	}
+	return lines
+}
+
 func (m diffModel) viewPick() string {
-	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito diff"))
+	l := m.lay.norm()
+	hints := diffPickHints()
+	head := strings.Join(m.pickHead(), "\n")
+	foot := footer(l, hints, true)
 
-	step := i18n.T("diff.step_base")
-	if m.base != "" {
-		step = i18n.T("diff.step_target")
-	}
-	sb.WriteString(style.Dimmed.Render("  "+step) + "\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("diff.hint_pick")) + "\n\n")
-
-	if m.base != "" {
-		sb.WriteString(style.Label.Render("base: ") + refBaseStyle.Render(m.base) + "\n\n")
-	}
-	if m.errMsg != "" {
-		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
+	if m.helpOpen {
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.refs) == 0 {
-		sb.WriteString(style.Dimmed.Render(i18n.T("diff.no_refs")) + "\n")
-		return sb.String()
+		body := style.MetaDim.Render(i18n.T("diff.no_refs"))
+		return frameFull(l, head, style.Truncate(body, l.Width), foot)
 	}
 
-	for i, r := range m.refs {
-		disp := refStyle.Render(r)
-		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + selRowBg.Render(disp) + "\n")
-		} else {
-			sb.WriteString("  " + disp + "\n")
-		}
+	w := m.window()
+	rl := listLayout(l, w)
+	start, end := w.bounds()
+	var lines []string
+	for i := start; i < end; i++ {
+		lines = append(lines, row(rl, i == w.Cursor, style.Ref.Render(m.refs[i])))
 	}
-	return sb.String()
+	return frameFull(l, head, listBody(l, w, lines), foot)
 }
 
 func (m diffModel) viewDiff() string {
-	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito diff  ›  ") +
-		refBaseStyle.Render(m.base) + style.Dimmed.Render(" .. ") + refTgtStyle.Render(m.target) + "\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
+	l := m.lay.norm()
+
+	summary := style.Label.Render(i18n.T("diff.label_base")) + " " + style.RefBase.Render(m.base) +
+		"  " + style.MetaDim.Render(style.G.Arrow) + "  " +
+		style.Label.Render(i18n.T("diff.label_target")) + " " + style.RefTarget.Render(m.target)
+	head := strings.Join([]string{
+		header(l, "diff", "", ""),
+		style.Truncate(summary, l.Width),
+		"",
+	}, "\n")
+	foot := footer(l, scrollHints(), false)
+
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
-		return sb.String()
+		return frameFull(l, head, style.MetaDim.Render("  "+i18n.T("common.loading")), foot)
 	}
-	sb.WriteString(m.vp.View())
-	return sb.String()
+	return frameFull(l, head, m.vp.View(), foot)
 }
+
+// ── RunDiff ──────────────────────────────────────────────────────────────────
 
 func RunDiff() {
 	refs, err := git.GetRefs()
@@ -211,7 +281,7 @@ func RunDiff() {
 		fmt.Println(i18n.T("diff.no_compare"))
 		return
 	}
-	p := tea.NewProgram(diffModel{refs: refs}, tea.WithAltScreen())
+	p := tea.NewProgram(diffModel{refs: refs, lay: newLayout()}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

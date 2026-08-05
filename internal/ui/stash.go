@@ -7,16 +7,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"gito/internal/git"
 	"gito/internal/i18n"
 	"gito/internal/style"
-)
-
-var (
-	stashRefStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	stashBranchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	stashMsgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
 )
 
 // ── panes ─────────────────────────────────────────────────────────────────────
@@ -33,15 +26,17 @@ const (
 type stashModel struct {
 	stashes []git.StashEntry
 	cursor  int
+	offset  int // first visible row of the stash list
 	pane    stashPane
 
 	vp      viewport.Model
 	vpReady bool
 
-	confirmDrop   bool
-	errMsg        string
-	successMsg    string
-	width, height int
+	confirmDrop bool
+	helpOpen    bool
+	errMsg      string
+	successMsg  string
+	lay         layout
 }
 
 // ── messages ──────────────────────────────────────────────────────────────────
@@ -82,23 +77,25 @@ func (m stashModel) Init() tea.Cmd { return doStashLoad() }
 func (m stashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		m.lay = m.lay.resize(msg.Width, msg.Height)
 		if m.vpReady {
-			m.vp.Width = msg.Width
-			m.vp.Height = m.stashVPHeight()
+			m.vp.Width = m.lay.Width
+			m.vp.Height = m.showRows()
 		}
+		m.offset = m.window().Offset
 
 	case stashListMsg:
 		m.stashes = msg.stashes
 		if m.cursor >= len(m.stashes) && len(m.stashes) > 0 {
 			m.cursor = len(m.stashes) - 1
 		}
+		m.offset = m.window().Offset
 
 	case stashErrMsg:
 		m.errMsg = msg.err.Error()
 
 	case stashShowMsg:
-		m.vp = viewport.New(m.width, m.stashVPHeight())
+		m.vp = viewport.New(m.lay.norm().Width, m.showRows())
 		m.vp.SetContent(msg.content)
 		m.vpReady = true
 
@@ -111,12 +108,21 @@ func (m stashModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m stashModel) stashVPHeight() int {
-	h := m.height - 4
-	if h < 1 {
-		return 1
-	}
-	return h
+// showRows is the height of the diff viewport: header, stash summary, blank
+// separator and footer are subtracted from the terminal height.
+func (m stashModel) showRows() int { return bodyRows(m.lay, 4) }
+
+// listRows is how many stashes fit under the list header, banners included.
+func (m stashModel) listRows() int { return bodyRows(m.lay, len(m.listHead())+1) }
+
+// window is the scrolling state of the stash list.
+func (m stashModel) window() listWindow {
+	return listWindow{
+		Cursor: m.cursor,
+		Offset: m.offset,
+		Total:  len(m.stashes),
+		Rows:   m.listRows(),
+	}.clamp()
 }
 
 func (m stashModel) updateShow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -135,7 +141,8 @@ func (m stashModel) updateShow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// drop confirmation
+	// Drop confirmation. Kept first and unchanged: any key that is not 'y'
+	// cancels, so nothing below can intercept a confirmation.
 	if m.confirmDrop {
 		switch msg.String() {
 		case "y", "Y":
@@ -154,12 +161,25 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Key overlay. While it is open it owns '?', 'q' and 'esc'.
+	if m.helpOpen {
+		switch msg.String() {
+		case "?", "q", "esc":
+			m.helpOpen = false
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	m.errMsg = ""
 	m.successMsg = ""
 
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
+	case "?":
+		m.helpOpen = true
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -198,7 +218,21 @@ func (m stashModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.confirmDrop = true
 		}
 	}
+	m.offset = m.window().Offset
 	return m, nil
+}
+
+// ── hints ────────────────────────────────────────────────────────────────────
+
+func stashListHints() []keyHint {
+	return []keyHint{
+		{Keys: "enter/p", Desc: i18n.T("key.pop")},
+		{Keys: "a", Desc: i18n.T("key.apply")},
+		{Keys: "d", Desc: i18n.T("key.diff")},
+		{Keys: "D", Desc: i18n.T("key.drop")},
+		moveHint(),
+		quitHint(),
+	}
 }
 
 // ── View ─────────────────────────────────────────────────────────────────────
@@ -210,70 +244,95 @@ func (m stashModel) View() string {
 	return m.viewList()
 }
 
-func (m stashModel) viewList() string {
-	var sb strings.Builder
+// position reports "cursor/total" without depending on the visible row count.
+func (m stashModel) position() string {
+	return listWindow{Cursor: m.cursor, Total: len(m.stashes), Rows: 1}.position()
+}
 
-	sb.WriteString(style.Title.Render("gito stash"))
-	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d entries", len(m.stashes))) + "\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("stash.hint_list")) + "\n\n")
+// listHead is every line above the stash list: header, blank separator and the
+// live banners. Its length is what bodyRows subtracts.
+func (m stashModel) listHead() []string {
+	l := m.lay.norm()
+
+	meta := i18n.Tf("meta.stashes", len(m.stashes))
+	if pos := m.position(); pos != "" {
+		meta += "  " + pos
+	}
+	lines := []string{header(l, "stash", "", meta), ""}
 
 	if m.confirmDrop && m.cursor < len(m.stashes) {
-		sb.WriteString(style.Failure.Render(
-			i18n.Tf("stash.drop_confirm", m.stashes[m.cursor].Ref),
-		) + "\n")
-		sb.WriteString(style.Label.Render(i18n.T("common.confirm_yn")) + "\n\n")
+		prompt := i18n.Tf("stash.drop_confirm", m.stashes[m.cursor].Ref)
+		lines = append(lines, splitLines(confirmBar(l, prompt))...)
+		lines = append(lines, "")
 	}
-	if m.errMsg != "" {
-		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
+	if b := banner(l, bannerError, m.errMsg); b != "" {
+		lines = append(lines, b, "")
 	}
-	if m.successMsg != "" {
-		sb.WriteString(style.Success.Render("✓ "+m.successMsg) + "\n\n")
+	if b := banner(l, bannerSuccess, m.successMsg); b != "" {
+		lines = append(lines, b, "")
+	}
+	return lines
+}
+
+func (m stashModel) viewList() string {
+	l := m.lay.norm()
+	hints := stashListHints()
+	head := strings.Join(m.listHead(), "\n")
+	foot := footer(l, hints, true)
+
+	if m.helpOpen {
+		return frameOverlay(l, head, hints, foot)
 	}
 
 	if len(m.stashes) == 0 {
-		sb.WriteString(style.Dimmed.Render(i18n.T("stash.none")) + "\n")
-		return sb.String()
+		body := style.MetaDim.Render(i18n.T("stash.none"))
+		return frameFull(l, head, style.Truncate(body, l.Width), foot)
 	}
 
-	for i, s := range m.stashes {
-		ref := stashRefStyle.Render(s.Ref)
-		branch := ""
-		if s.Branch != "" {
-			branch = stashBranchStyle.Render(" ("+s.Branch+")") + " "
-		}
-		msg := stashMsgStyle.Render(s.Subject)
-
-		if i == m.cursor {
-			sb.WriteString(cursorGlyp.Render("▶") + " " + ref + " " + branch + msg + "\n")
-		} else {
-			sb.WriteString("  " + ref + " " + branch + msg + "\n")
-		}
+	w := m.window()
+	rl := listLayout(l, w)
+	start, end := w.bounds()
+	var lines []string
+	for i := start; i < end; i++ {
+		lines = append(lines, row(rl, i == w.Cursor, stashLine(m.stashes[i])))
 	}
+	return frameFull(l, head, listBody(l, w, lines), foot)
+}
 
-	return sb.String()
+// stashLine renders one stash as ref, originating branch and subject.
+func stashLine(s git.StashEntry) string {
+	line := style.Ref.Render(s.Ref) + " "
+	if s.Branch != "" {
+		line += style.Date.Render("("+s.Branch+")") + " "
+	}
+	return line + style.Subject.Render(s.Subject)
 }
 
 func (m stashModel) viewShow() string {
-	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito stash  ›  show") + "\n")
+	l := m.lay.norm()
+
+	summary := ""
 	if m.cursor < len(m.stashes) {
 		s := m.stashes[m.cursor]
-		sb.WriteString(stashRefStyle.Render(s.Ref) + "  " + stashMsgStyle.Render(s.Subject))
+		summary = style.Ref.Render(s.Ref) + "  " + style.Subject.Render(s.Subject)
 	}
-	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
+	head := strings.Join([]string{
+		header(l, "stash", i18n.T("key.diff"), m.position()),
+		style.Truncate(summary, l.Width),
+		"",
+	}, "\n")
+	foot := footer(l, scrollHints(), false)
 
 	if !m.vpReady {
-		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
-		return sb.String()
+		return frameFull(l, head, style.MetaDim.Render("  "+i18n.T("common.loading")), foot)
 	}
-	sb.WriteString(m.vp.View())
-	return sb.String()
+	return frameFull(l, head, m.vp.View(), foot)
 }
 
 // ── RunStash ─────────────────────────────────────────────────────────────────
 
 func RunStash() {
-	p := tea.NewProgram(stashModel{}, tea.WithAltScreen())
+	p := tea.NewProgram(stashModel{lay: newLayout()}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
