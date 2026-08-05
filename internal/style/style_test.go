@@ -273,3 +273,78 @@ func TestSemanticStylesHaveNoPadding(t *testing.T) {
 		}
 	}
 }
+
+// ── color output ─────────────────────────────────────────────────────────────
+
+// TestSelectRowReopensBackgroundAfterEveryReset pins the reason SelectRow
+// exists: Lip Gloss copies pre-styled content through verbatim, so the reset
+// that ends an inner cell would clear the row background for the rest of the
+// line. There must be exactly one re-open per reset, plus the opening one.
+func TestSelectRowReopensBackgroundAfterEveryReset(t *testing.T) {
+	restore := UseColor(true)
+	defer restore()
+
+	open, end := wrapOf(RowSel)
+	if open == "" || end == "" {
+		t.Fatal("UseColor did not activate a color profile")
+	}
+
+	content := Hash.Render("abc123") + " tail " + Date.Render("2024-01-01") + " end"
+	resets := strings.Count(content, resetSeq)
+	if resets != 2 {
+		t.Fatalf("test fixture has %d inner resets, want 2", resets)
+	}
+
+	got := SelectRow(content)
+	if n, want := strings.Count(got, open), resets+1; n != want {
+		t.Errorf("the row style is opened %d time(s), want %d (once plus one per inner reset)", n, want)
+	}
+	if !strings.HasSuffix(got, end) {
+		t.Errorf("SelectRow did not close the row style: %q", got)
+	}
+	if DisplayWidth(got) != DisplayWidth(content) {
+		t.Errorf("SelectRow changed the display width from %d to %d",
+			DisplayWidth(content), DisplayWidth(got))
+	}
+	if stripped := strings.ReplaceAll(got, "\x1b", ""); !strings.Contains(stripped, "abc123") {
+		t.Errorf("SelectRow lost the cell text: %q", got)
+	}
+}
+
+// TestSelectRowHandlesGitResets covers the shorter reset git writes with
+// --color=always, which reaches a row whenever pre-colored output is listed.
+func TestSelectRowHandlesGitResets(t *testing.T) {
+	restore := UseColor(true)
+	defer restore()
+
+	open, _ := wrapOf(RowSel)
+	got := SelectRow("\x1b[32madded\x1b[m plain")
+	if n := strings.Count(got, open); n != 2 {
+		t.Errorf("the row style is opened %d time(s) around a git reset, want 2", n)
+	}
+}
+
+// TestSelectRowIsIdentityWithoutColor documents the `go test` and NO_COLOR case:
+// with no profile there is nothing to re-open, so the line is untouched.
+func TestSelectRowIsIdentityWithoutColor(t *testing.T) {
+	line := "abc123 plain tail"
+	if got := SelectRow(line); got != line {
+		t.Errorf("SelectRow with no color profile = %q, want it unchanged", got)
+	}
+}
+
+// TestAdaptiveColorsDifferPerBackground asserts the theme really is adaptive:
+// the same role resolves to different escapes on a light and a dark terminal.
+func TestAdaptiveColorsDifferPerBackground(t *testing.T) {
+	restoreDark := UseColor(true)
+	dark := Hash.Render("x") + Subject.Render("x") + RowSel.Render("x")
+	restoreDark()
+
+	restoreLight := UseColor(false)
+	light := Hash.Render("x") + Subject.Render("x") + RowSel.Render("x")
+	restoreLight()
+
+	if dark == light {
+		t.Errorf("light and dark backgrounds rendered identically: %q", dark)
+	}
+}
