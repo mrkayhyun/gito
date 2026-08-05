@@ -152,6 +152,25 @@ var (
 	ScrollThumb = lipgloss.NewStyle().Foreground(th.Accent)
 )
 
+// Box is the bordered-box style for the active glyph table: the rounded Unicode
+// border normally, and an ASCII one when the terminal cannot render box drawing
+// characters. It is a function rather than a var because the glyph table can be
+// swapped at runtime (and in tests) through UseASCII.
+func Box() lipgloss.Style {
+	if G == ASCIIGlyphs {
+		return Border.Border(lipgloss.ASCIIBorder())
+	}
+	return Border
+}
+
+// Overlay is Box for the key-table overlay, which composes its own padding.
+func Overlay() lipgloss.Style {
+	if G == ASCIIGlyphs {
+		return OverlayBox.Border(lipgloss.ASCIIBorder())
+	}
+	return OverlayBox
+}
+
 // ── glyphs ─────────────────────────────────────────────────────────────────
 
 // Glyphs is every non-ASCII character the UI prints, so a terminal that cannot

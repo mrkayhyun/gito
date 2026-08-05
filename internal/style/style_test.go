@@ -222,6 +222,33 @@ func TestLegacyStylesStillRender(t *testing.T) {
 	}
 }
 
+func TestBoxBordersFollowTheGlyphTable(t *testing.T) {
+	// A box drawn with Unicode corners on a terminal that cannot render them is
+	// exactly the replacement-box problem the glyph table exists to avoid.
+	restore := UseASCII(false)
+	unicode := Box().Render("x") + Overlay().Render("x")
+	restore()
+
+	restore = UseASCII(true)
+	ascii := Box().Render("x") + Overlay().Render("x")
+	restore()
+
+	for _, r := range ascii {
+		if r > 127 && r != 0x1b {
+			t.Errorf("the ASCII box renders the non-ASCII rune %q: %q", r, ascii)
+			break
+		}
+	}
+	if ascii == unicode {
+		t.Error("Box/Overlay render identically with and without the ASCII table")
+	}
+	for _, want := range []string{"╭", "╰"} {
+		if !strings.Contains(unicode, want) {
+			t.Errorf("the Unicode box lost its %q corner", want)
+		}
+	}
+}
+
 func TestSemanticStylesHaveNoPadding(t *testing.T) {
 	// chrome.go composes these into fixed-width rows, so padding would break
 	// the width math.

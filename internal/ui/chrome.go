@@ -132,7 +132,14 @@ func footer(l layout, hints []keyHint, hasHelp bool) string {
 		return ""
 	}
 
-	indicator := style.KeyCap.Render("?") + " " + style.FooterBar.Render(i18n.T("key.help"))
+	// The trailing marker is the "? help" affordance on screens that offer the
+	// key overlay, and a neutral ellipsis on the ones that do not: those screens
+	// read printable runes into a filter, so promising a '?' key that is not
+	// bound would be a lie. Either way the user learns hints were dropped.
+	indicator := style.MetaDim.Render(style.G.Ellipsis)
+	if hasHelp {
+		indicator = style.KeyCap.Render("?") + " " + style.FooterBar.Render(i18n.T("key.help"))
+	}
 	indicatorW := style.DisplayWidth(indicator) + style.DisplayWidth(hintSep)
 
 	rendered := make([]string, 0, len(hints))
@@ -213,6 +220,13 @@ func moveHint() keyHint {
 	return keyHint{Keys: style.G.Up + "/" + style.G.Down + " j/k", Desc: i18n.T("key.move")}
 }
 
+// arrowMoveHint is the navigation hint of the panes whose filter textinput
+// consumes printable runes, so j/k type into the filter and only the arrows
+// (plus the ctrl pair) move the cursor.
+func arrowMoveHint() keyHint {
+	return keyHint{Keys: style.G.Up + "/" + style.G.Down + " ^p/^n", Desc: i18n.T("key.move")}
+}
+
 // scrollHints are the hints of every viewport pane: scroll, page and back.
 func scrollHints() []keyHint {
 	return []keyHint{
@@ -225,6 +239,12 @@ func scrollHints() []keyHint {
 // quitHint closes a list pane's footer.
 func quitHint() keyHint {
 	return keyHint{Keys: "q/esc", Desc: i18n.T("key.quit")}
+}
+
+// escQuitHint is quitHint for the panes where 'q' is a printable rune typed
+// into a filter or an input field, so only esc quits.
+func escQuitHint() keyHint {
+	return keyHint{Keys: "esc", Desc: i18n.T("key.quit")}
 }
 
 // helpOverlay renders the full hint list as an aligned two-column table inside
@@ -259,7 +279,7 @@ func helpOverlay(l layout, hints []keyHint) string {
 	for i, s := range lines {
 		lines[i] = " " + style.Pad(s, body) + " "
 	}
-	return style.OverlayBox.Render(strings.Join(lines, "\n"))
+	return style.Overlay().Render(strings.Join(lines, "\n"))
 }
 
 // ── banners ────────────────────────────────────────────────────────────────
@@ -438,6 +458,25 @@ func frameInline(head, body, foot string) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+// frameInlineFit is frameInline for the inline screens that render a variable
+// number of body lines (a launcher list, a branch list, a wizard step). It
+// never pads - the shell history has to survive - but it does cut, so a short
+// terminal gets a shorter view instead of a scrolled one. Body lines go first
+// and head lines only if the head alone is taller than the terminal, so the
+// footer hint surface is the last thing to be sacrificed.
+func frameInlineFit(l layout, head, body []string, foot string) string {
+	l = l.norm()
+
+	avail := max(l.Height-len(splitLines(foot)), 0)
+	if len(head) > avail {
+		head = head[:avail]
+	}
+	if keep := max(avail-len(head), 0); len(body) > keep {
+		body = body[:keep]
+	}
+	return frameInline(strings.Join(head, "\n"), strings.Join(body, "\n"), foot)
 }
 
 // ── small helpers ──────────────────────────────────────────────────────────
