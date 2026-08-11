@@ -1,0 +1,70 @@
+name: ✨ Feature request
+description: Suggest a new command, keybinding, or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        gito aims to be a fast, subcommand-based Git TUI — one focused Bubble Tea
+        screen per git command, not an all-in-one dashboard. Proposals that fit
+        that shape are the easiest to accept.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem
+      description: >-
+        Describe the situation you hit, not the solution you have in mind. What
+        were you trying to do, and where did gito get in the way?
+      placeholder: >-
+        When I'm on a branch with many commits I can't tell which ones are
+        already pushed, so I drop back to `git log --oneline @{u}..` in a second
+        terminal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: >-
+        Your proposed behaviour. Concrete keybindings and what appears on screen
+        are more useful than an abstract description.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change is this
+      options:
+        - A new subcommand
+        - A change to an existing subcommand
+        - A new keybinding or interaction
+        - Configuration / defaults
+        - Translation or locale support
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: >-
+        Including plain git commands or other TUIs that solve this, and why they
+        aren't enough here.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Would you be up for implementing it?
+      description: >-
+        Entirely optional, and a "no" doesn't weigh against the request.
+        [CONTRIBUTING.md](https://github.com/mrkayhyun/gito/blob/main/CONTRIBUTING.md)
+        walks through adding a command.
+      options:
+        - label: I'd be willing to open a PR for this
+          required: false

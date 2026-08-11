@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # Go module dependencies (bubbletea / bubbles / lipgloss and their tree).
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: scope
+    labels:
+      - dependencies
+    groups:
+      # The charm libraries move together; one PR per week beats five.
+      charmbracelet:
+        patterns:
+          - "github.com/charmbracelet/*"
+
+  # Pinned action versions in ci.yml / release.yml — notably securego/gosec.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - ci

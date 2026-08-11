@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/mrkayhyun/gito/security/advisories/new
+    about: >-
+      Please report security problems privately, not as a public issue.
+      See SECURITY.md for the threat model and what to include.
+
+  - name: 💬 Question or idea
+    url: https://github.com/mrkayhyun/gito/discussions
+    about: >-
+      For usage questions and open-ended ideas, start a discussion. Bug reports
+      and concrete feature requests belong in issues.
