@@ -207,14 +207,9 @@ go test ./...      # tests (the git layer is verified against real temp repos)
 
 ## Contributing
 
-To add a new command:
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-1. Add the git wrapper function + tests in `internal/git`.
-2. Add an `xxxModel` (Model/Update/View) and `RunXxx()` in `internal/ui` — `stash.go` / `tag.go` are good templates.
-3. Register the command in the `main.go` switch and help text.
-4. Make sure `go build ./... && go vet ./... && go test ./...` all pass.
-
-Issues and pull requests are welcome.
+Security problems should be reported privately; see [SECURITY.md](SECURITY.md).
 
 ## License
 
