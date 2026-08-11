@@ -76,6 +76,11 @@ changelog:
 # If the token is absent the formula upload is skipped so the release still succeeds.
 brews:
   - name: gito
+    # Must be set explicitly. Without it the formula lands at the tap root, and
+    # Homebrew reads ONLY the Formula/ directory when one exists — so a
+    # root-level formula is invisible to `brew install` while the release still
+    # reports success. That combination bit v1.1.1.
+    directory: Formula
     repository:
       owner: mrkayhyun
       name: homebrew-tap
