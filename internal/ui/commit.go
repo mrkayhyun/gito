@@ -9,10 +9,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"gito/internal/config"
-	"gito/internal/git"
-	"gito/internal/i18n"
-	"gito/internal/style"
+	"github.com/mrkayhyun/gito/internal/config"
+	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/style"
 )
 
 // subjectRecommendedLen is the Conventional Commits recommended maximum length

@@ -19,7 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/i18n"
 )
 
 type CommitType struct {

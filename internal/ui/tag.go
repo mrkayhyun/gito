@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"gito/internal/git"
-	"gito/internal/i18n"
-	"gito/internal/style"
+	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/style"
 )
 
 var (

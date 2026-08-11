@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"gito/internal/config"
-	"gito/internal/git"
-	"gito/internal/i18n"
-	"gito/internal/style"
-	"gito/internal/ui"
+	"github.com/mrkayhyun/gito/internal/config"
+	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/style"
+	"github.com/mrkayhyun/gito/internal/ui"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".

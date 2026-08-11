@@ -5,3 +5,16 @@
 # Go
 *.test
 *.out
+*.prof
+
+# Local agent / task scratch files
+.agents/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

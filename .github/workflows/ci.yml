@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -46,7 +49,57 @@ jobs:
       # git-wrapper CLI that execs `git` with internally-constructed, ref-validated
       # arguments (see internal/git/validate.go). gosec cannot prove those calls safe,
       # so the rule is a systemic false positive here; all other rules stay active.
+      # The exclusion and its reasoning are also documented in SECURITY.md.
       - name: Security scan (gosec)
         uses: securego/gosec@v2.22.9
         with:
           args: '-exclude=G204 ./...'
+
+  # `go install github.com/mrkayhyun/gito@latest` is the headline install command in
+  # the README, and it silently broke once already: go.mod declared the module as
+  # bare `gito`, so the install failed with a path mismatch and pkg.go.dev could not
+  # index the module. Nothing in the build/test job catches that, because local
+  # builds never check the declared module path. This job does.
+  install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Verify declared module path
+        run: |
+          declared=$(go list -m)
+          expected="github.com/${{ github.repository }}"
+          echo "declared: $declared"
+          echo "expected: $expected"
+          if [ "$declared" != "$expected" ]; then
+            echo "::error::go.mod declares '$declared' but the repository is '$expected'."
+            echo "::error::'go install $expected@latest' will fail with a module path mismatch."
+            exit 1
+          fi
+
+      - name: Install from source tree and run it
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          go install .
+          "$GOBIN/gito" version
+
+      # On main the commit is pushed and public, so the real end-to-end path can be
+      # exercised: resolve the module from GitHub exactly as a user's toolchain would.
+      # Skipped on pull requests, where the head commit may live on a fork.
+      - name: Install by module path (main only)
+        if: github.event_name == 'push'
+        env:
+          GOBIN: ${{ runner.temp }}/bin-remote
+          GOPROXY: direct
+          GOFLAGS: -mod=mod
+        run: |
+          go install "github.com/${{ github.repository }}@${{ github.sha }}"
+          "$GOBIN/gito" version

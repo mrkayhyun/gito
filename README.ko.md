@@ -82,7 +82,19 @@ main.go                 // 서브커맨드 라우팅 + help
 
 ## 설치
 
-### 1) 설치 스크립트 (권장, zsh)
+### 1) Homebrew (macOS / Linux)
+
+```bash
+brew install mrkayhyun/tap/gito
+```
+
+### 2) go install
+
+```bash
+go install github.com/mrkayhyun/gito@latest
+```
+
+### 3) 설치 스크립트 (zsh)
 
 저장소에서 빌드하고 `~/.local/bin`에 설치한 뒤 `~/.zshrc`의 PATH까지 자동 설정합니다.
 
@@ -96,7 +108,10 @@ source ~/.zshrc   # 또는 새 터미널 열기
 - 제거: `./install.sh --uninstall` (바이너리 + `~/.zshrc` 블록 삭제)
 - `~/.zshrc`에는 마커 블록만 추가되며, 여러 번 실행해도 중복되지 않습니다(멱등).
 
-### 2) 수동 빌드
+### 4) 릴리스 바이너리 / 수동 빌드
+
+[Releases 페이지](https://github.com/mrkayhyun/gito/releases)에서 OS/arch에 맞는 아카이브를
+내려받아 압축을 풀고 `gito` 바이너리를 `PATH`에 두어도 됩니다. 직접 빌드하려면:
 
 ```bash
 # 소스에서 빌드
@@ -178,12 +193,9 @@ go test ./...      # 테스트 (git 계층은 임시 저장소로 검증)
 
 ## 기여
 
-새 명령을 추가하려면:
+이슈와 풀 리퀘스트를 환영합니다. 자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
-1. `internal/git`에 필요한 git 래퍼 함수 + 테스트를 추가합니다.
-2. `internal/ui`에 `xxxModel`(Model/Update/View)과 `RunXxx()`를 작성합니다. 기존 `stash.go`/`tag.go`가 좋은 템플릿입니다.
-3. `main.go`의 switch와 help 텍스트에 명령을 등록합니다.
-4. `go build ./... && go vet ./... && go test ./...`가 통과하는지 확인합니다.
+보안 문제는 공개 이슈 대신 비공개로 제보해 주세요. [SECURITY.md](SECURITY.md)에 절차가 있습니다.
 
 ## 라이선스
 

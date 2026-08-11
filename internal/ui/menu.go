@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"gito/internal/i18n"
-	"gito/internal/style"
+	"github.com/mrkayhyun/gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/style"
 )
 
 // MenuItem describes one selectable command in the launcher.
