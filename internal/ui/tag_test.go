@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"gito/internal/git"
-	"gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
 )
 
 // newTagListModel builds a tagModel sitting on the list pane with a hand-built

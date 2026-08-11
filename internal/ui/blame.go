@@ -8,9 +8,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"gito/internal/git"
-	"gito/internal/i18n"
-	"gito/internal/style"
+	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
+	"github.com/mrkayhyun/gito/internal/style"
 )
 
 type blamePane int
