@@ -51,7 +51,7 @@ jobs:
       # so the rule is a systemic false positive here; all other rules stay active.
       # The exclusion and its reasoning are also documented in SECURITY.md.
       - name: Security scan (gosec)
-        uses: securego/gosec@v2.22.9
+        uses: securego/gosec@v2.29.0
         with:
           args: '-exclude=G204 ./...'
 
