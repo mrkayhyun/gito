@@ -1,14 +1,16 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
-
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mrkayhyun/gito/internal/ai"
 	"github.com/mrkayhyun/gito/internal/config"
 	"github.com/mrkayhyun/gito/internal/git"
 	"github.com/mrkayhyun/gito/internal/i18n"
@@ -38,18 +40,29 @@ const (
 	stepDone
 )
 
+type aiSuggestionMsg struct {
+	suggestion ai.Suggestion
+}
+
+type aiErrorMsg struct {
+	err error
+}
+
 type commitModel struct {
-	step       commitStep
-	cursor     int
-	typeIdx    int
-	typeKeys   []string // e.g. ["feat","fix",...]
-	typeLabels []string // e.g. ["feat   New feature",...]
-	scope      textinput.Model
-	subject    textinput.Model
-	body       textinput.Model
-	err        error
-	done       bool
-	amend      bool // committed via --amend
+	step        commitStep
+	cursor      int
+	typeIdx     int
+	typeKeys    []string // e.g. ["feat","fix",...]
+	typeLabels  []string // e.g. ["feat   New feature",...]
+	scope       textinput.Model
+	subject     textinput.Model
+	body        textinput.Model
+	err         error
+	done        bool
+	amend       bool // committed via --amend
+	aiAvailable bool
+	aiLoading   bool
+	aiErr       error
 }
 
 func newCommitModel() commitModel {
@@ -74,12 +87,13 @@ func newCommitModel() commitModel {
 	}
 
 	return commitModel{
-		step:       stepType,
-		typeKeys:   keys,
-		typeLabels: labels,
-		scope:      scope,
-		subject:    subject,
-		body:       body,
+		step:        stepType,
+		typeKeys:    keys,
+		typeLabels:  labels,
+		scope:       scope,
+		subject:     subject,
+		body:        body,
+		aiAvailable: strings.TrimSpace(os.Getenv("ORCAROUTER_API_KEY")) != "",
 	}
 }
 
@@ -100,18 +114,100 @@ func (m commitModel) buildMessage() string {
 	return msg
 }
 
+func (m *commitModel) applyAISuggestion(s ai.Suggestion) {
+	typeIdx := -1
+	for i, key := range m.typeKeys {
+		if key == s.Type {
+			typeIdx = i
+			break
+		}
+	}
+	if typeIdx == -1 {
+		for i, key := range m.typeKeys {
+			if key == "chore" {
+				typeIdx = i
+				break
+			}
+		}
+	}
+	if typeIdx == -1 {
+		typeIdx = 0
+	}
+	m.typeIdx = typeIdx
+	m.cursor = typeIdx
+	m.scope.SetValue(clampSingleLine(s.Scope, 50))
+	m.subject.SetValue(clampSingleLine(s.Subject, 72))
+	m.body.SetValue(clampSingleLine(s.Body, 500))
+}
+
+func clampSingleLine(value string, maxRunes int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) > maxRunes {
+		runes = runes[:maxRunes]
+	}
+	return string(runes)
+}
+
+func generateAISuggestion() tea.Cmd {
+	return func() tea.Msg {
+		diff, err := git.GetStagedDiff()
+		if err != nil {
+			return aiErrorMsg{err: err}
+		}
+		if strings.TrimSpace(diff) == "" {
+			return aiErrorMsg{err: fmt.Errorf("no staged diff to send to AI")}
+		}
+
+		client, err := ai.NewOrcaRouterFromEnv()
+		if err != nil {
+			return aiErrorMsg{err: err}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		suggestion, err := client.GenerateCommitSuggestion(ctx, diff)
+		if err != nil {
+			return aiErrorMsg{err: err}
+		}
+		return aiSuggestionMsg{suggestion: suggestion}
+	}
+}
+
 func (m commitModel) Init() tea.Cmd {
 	return nil
 }
 
 func (m commitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case aiSuggestionMsg:
+		m.aiLoading = false
+		m.aiErr = nil
+		m.applyAISuggestion(msg.suggestion)
+		m.step = stepConfirm
+		return m, nil
+	case aiErrorMsg:
+		m.aiLoading = false
+		m.aiErr = msg.err
+		return m, nil
 	case tea.KeyMsg:
+		if m.aiLoading {
+			if msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
 		switch m.step {
 		case stepType:
 			switch msg.String() {
 			case "ctrl+c", "q":
 				return m, tea.Quit
+			case "a":
+				if m.aiAvailable {
+					m.aiErr = nil
+					m.aiLoading = true
+					return m, generateAISuggestion()
+				}
 			case "up", "k":
 				if m.cursor > 0 {
 					m.cursor--
@@ -200,6 +296,12 @@ func (m commitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.done = true
 				m.amend = true
 				return m, tea.Quit
+			case "r":
+				if m.aiAvailable {
+					m.aiErr = nil
+					m.aiLoading = true
+					return m, generateAISuggestion()
+				}
 			case "e":
 				m.step = stepSubject
 				cmd := m.subject.Focus()
@@ -239,6 +341,12 @@ func (m commitModel) View() string {
 	}
 	sb.WriteString(strings.Join(indicators, style.Dimmed.Render(" → ")) + "\n\n")
 
+	if m.aiLoading {
+		sb.WriteString(style.Label.Render("Generating commit message with OrcaRouter AI...") + "\n")
+		sb.WriteString(style.Dimmed.Render("ctrl+c to cancel") + "\n")
+		return sb.String()
+	}
+
 	switch m.step {
 	case stepType:
 		sb.WriteString(style.Label.Render(i18n.T("commit.select_type")) + "\n\n")
@@ -249,7 +357,13 @@ func (m commitModel) View() string {
 				sb.WriteString(style.Normal.Render("  "+t) + "\n")
 			}
 		}
-		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_type")))
+		if m.aiAvailable {
+			sb.WriteString("\n" + style.Selected.Render(" a ") + style.Normal.Render(" Generate with OrcaRouter AI"))
+		}
+		if m.aiErr != nil {
+			sb.WriteString("\n" + style.Failure.Render("AI: "+m.aiErr.Error()))
+		}
+		sb.WriteString("\n\n" + style.Dimmed.Render(i18n.T("commit.hint_type")))
 
 	case stepScope:
 		sb.WriteString(style.Label.Render(i18n.T("commit.enter_scope")) + "\n\n")
@@ -285,7 +399,14 @@ func (m commitModel) View() string {
 		sb.WriteString(style.Selected.Render(" y ") + style.Normal.Render(" "+i18n.T("commit.yes")+"   "))
 		sb.WriteString(style.Selected.Render(" n ") + style.Normal.Render(" "+i18n.T("commit.no")+"   "))
 		sb.WriteString(style.Selected.Render(" a ") + style.Normal.Render(" "+i18n.T("commit.amend")+"   "))
-		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" "+i18n.T("commit.edit")+"\n"))
+		sb.WriteString(style.Selected.Render(" e ") + style.Normal.Render(" "+i18n.T("commit.edit")+"   "))
+		if m.aiAvailable {
+			sb.WriteString(style.Selected.Render(" r ") + style.Normal.Render(" regenerate AI"))
+		}
+		sb.WriteString("\n")
+		if m.aiErr != nil {
+			sb.WriteString(style.Failure.Render("AI: "+m.aiErr.Error()) + "\n")
+		}
 		sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.hint_back_body")))
 		if last := git.GetLastCommitSubject(); last != "" {
 			sb.WriteString("\n" + style.Dimmed.Render(i18n.T("commit.amend_prev")+last) + "\n")
