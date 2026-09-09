@@ -65,6 +65,10 @@ gito remote    Remote list (fetch / ahead-behind status)
 gito diff      Compare two refs (branch/tag) and view the diff
 gito reflog    Browse reflog and recover commits into a new branch
 gito blame     Pick a file and view line-by-line blame
+gito rebase    Safe interactive rebase (reorder / squash / drop / reword)
+gito cherry-pick  Cherry-pick commits from another branch (auto-abort on conflict)
+gito undo      Safely undo the last git operation (soft/hard)
+gito worktree  Manage git worktrees (list / add / remove)
 ```
 
 | Command | What it does | Key bindings |
@@ -79,6 +83,10 @@ gito blame     Pick a file and view line-by-line blame
 | `diff` | Pick two refs (branch/tag) and compare | `enter` select (base → target) |
 | `reflog` | Browse reflog and recover commits (non-destructive: creates a new branch) | `b` branch from here |
 | `blame` | Pick a file and view line-by-line blame | `enter` view blame |
+| `rebase` | Safe interactive rebase: reorder / squash / fixup / drop / reword, with a backup ref created before running | `p/r/s/f/d` actions, `K/J` move, `y` run |
+| `cherry-pick` | Visually select commits from another branch and cherry-pick them (auto-abort on conflict) | `space` select, `a` all, `y` run |
+| `undo` | Safely undo the last git operation (soft/hard) | `s` soft, `h` hard, `y` confirm |
+| `worktree` | List / add (existing or new branch) / remove worktrees | `a` add, `n` new branch, `D` delete |
 
 ## Install
 
