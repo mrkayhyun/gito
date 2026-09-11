@@ -152,3 +152,27 @@ func TestGetAheadBehindWithUpstream(t *testing.T) {
 		t.Errorf("expected behind=0, got %d", behind)
 	}
 }
+
+// TestIsRemoteBranch pins the remote-tracking predicate used to decide switch
+// vs delete semantics. A regression here would mis-route a remote ref name.
+func TestIsRemoteBranch(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"remotes prefix", "remotes/origin/main", true},
+		{"remotes prefix bare remote", "remotes/upstream/feature", true},
+		{"local branch", "main", false},
+		{"origin without remotes prefix", "origin/main", false},
+		{"empty", "", false},
+		{"substring not prefix", "my-remotes/x", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsRemoteBranch(tc.in); got != tc.want {
+				t.Errorf("IsRemoteBranch(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
