@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -129,5 +130,41 @@ func TestCreateTagRequiresName(t *testing.T) {
 
 	if err := CreateTag("", "", ""); err == nil {
 		t.Errorf("expected error for empty tag name")
+	}
+}
+
+// TestCreateTagValidatesRef pins the defense-in-depth guard on the tag TARGET
+// (the third parameter). Per SECURITY.md's argument-construction threat model,
+// a user-influenced value in operand position must pass ValidateRefName. A plain
+// ref (branch/hash) is accepted; an option-injection- or metachar-shaped ref is
+// rejected by the validator, and no tag is created on rejection.
+func TestCreateTagValidatesRef(t *testing.T) {
+	cleanup := setupRepo(t)
+	defer cleanup()
+
+	// A legitimate ref target must still succeed. "HEAD" is a plain operand
+	// that passes ValidateRefName (no metacharacters) and resolves in any repo.
+	if err := CreateTag("v-ok", "", "HEAD"); err != nil {
+		t.Fatalf("CreateTag with valid ref (HEAD) failed: %v", err)
+	}
+
+	beforeTags, _ := GetTags()
+
+	badRefs := []string{"-D", "--force", "a..b", "foo.lock", ".hidden", "trail/"}
+	for _, ref := range badRefs {
+		err := CreateTag("v-guard", "", ref)
+		if err == nil {
+			t.Errorf("CreateTag(ref=%q) = nil, want error", ref)
+			continue
+		}
+		if !strings.Contains(err.Error(), validatorErrText) {
+			t.Errorf("CreateTag(ref=%q) error = %q, want it to contain %q (ref guard missing?)",
+				ref, err.Error(), validatorErrText)
+		}
+	}
+
+	afterTags, _ := GetTags()
+	if len(afterTags) != len(beforeTags) {
+		t.Errorf("tag set changed after rejected refs: before %d, after %d", len(beforeTags), len(afterTags))
 	}
 }
