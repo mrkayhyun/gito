@@ -415,6 +415,13 @@ func CreateTag(name, message, ref string) error {
 	}
 	args = append(args, "--end-of-options", name)
 	if strings.TrimSpace(ref) != "" {
+		// The tag target is a second operand after --end-of-options. Validate it
+		// with the same guard as the name (defense in depth per SECURITY.md's
+		// argument-construction threat model) so no untrusted, unvalidated value
+		// reaches git in operand position.
+		if err := ValidateRefName(ref); err != nil {
+			return err
+		}
 		args = append(args, ref)
 	}
 	out, err := exec.Command("git", args...).CombinedOutput()
