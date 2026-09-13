@@ -29,6 +29,30 @@ ok()    { printf '\033[0;32m✓\033[0m %s\n' "$*"; }
 warn()  { printf '\033[0;33m!\033[0m %s\n' "$*"; }
 die()   { printf '\033[0;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
+# ── validate caller-supplied paths ──────────────────────────────────────────────
+# INSTALL_DIR and ZSHRC are environment variables the caller controls. INSTALL_DIR
+# is interpolated into a PATH line written to ~/.zshrc (export PATH="$INSTALL_DIR:…"),
+# so a value containing a double-quote or a newline would break out of that line and
+# inject arbitrary shell into the rc file. Reject those before any write. This is the
+# "INSTALL_DIR/ZSHRC cause a write outside the intended file" scenario in SECURITY.md.
+reject_unsafe_path() {
+  local label="$1" value="$2"
+  # A newline in the value can only be a break-out attempt for a single-line write.
+  case "$value" in
+    *$'\n'*) die "$label must not contain a newline" ;;
+  esac
+  # INSTALL_DIR lands inside a double-quoted shell string; a double quote escapes it.
+  if [ "$label" = "INSTALL_DIR" ]; then
+    case "$value" in
+      *'"'*)  die "INSTALL_DIR must not contain a double-quote character" ;;
+      *'`'*)  die "INSTALL_DIR must not contain a backtick" ;;
+      *'$('*) die "INSTALL_DIR must not contain a command substitution" ;;
+    esac
+  fi
+}
+reject_unsafe_path "INSTALL_DIR" "$INSTALL_DIR"
+reject_unsafe_path "ZSHRC" "$ZSHRC"
+
 # ── uninstall ─────────────────────────────────────────────────────────────────
 uninstall() {
   if [ -f "$INSTALL_DIR/$BIN_NAME" ]; then

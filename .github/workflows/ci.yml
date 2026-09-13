@@ -103,3 +103,16 @@ jobs:
         run: |
           go install "github.com/${{ github.repository }}@${{ github.sha }}"
           "$GOBIN/gito" version
+
+  # install.sh appends a PATH block to the user's ~/.zshrc — a genuinely sensitive
+  # write (see SECURITY.md §2). It had no CI coverage, so a shell bug in it shipped
+  # unchecked. shellcheck lints the installer on every push/PR; the caller-supplied
+  # INSTALL_DIR/ZSHRC break-out is guarded in the script itself by reject_unsafe_path.
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run shellcheck
+        run: shellcheck --severity=warning install.sh
