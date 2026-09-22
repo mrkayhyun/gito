@@ -20,11 +20,31 @@ type UndoInfo struct {
 	Action string
 }
 
+// undoAction refuses checkouts: resetting to the previous HEAD after a branch
+// switch would move the destination branch, not switch back to the source.
+// Check at execution time as well as preview time since another Git command
+// may have run while the confirmation screen was open.
+func undoAction() (string, error) {
+	out, err := exec.Command("git", "reflog", "-1", "--pretty=format:%gs").Output()
+	if err != nil {
+		return "", fmt.Errorf("git reflog: %w", err)
+	}
+	action := strings.TrimSpace(string(out))
+	if strings.HasPrefix(action, "checkout:") {
+		return "", fmt.Errorf("cannot undo a branch switch with reset; use git switch - to switch back, or gito reflog to select a recovery point")
+	}
+	return action, nil
+}
+
 // GetUndoInfo retrieves information about what "undo" would do.
 // It looks at HEAD@{1} — the previous HEAD position — and reports it so the
 // user can decide whether to proceed.
 // Returns nil, nil if there is nothing to undo (e.g. only 1 reflog entry).
 func GetUndoInfo() (*UndoInfo, error) {
+	action, err := undoAction()
+	if err != nil {
+		return nil, err
+	}
 	// Current HEAD.
 	curOut, err := exec.Command("git", "log", "-1",
 		"--pretty=format:%H%x00%s").Output()
@@ -53,11 +73,6 @@ func GetUndoInfo() (*UndoInfo, error) {
 		return nil, nil
 	}
 
-	// Get the reflog action text for HEAD@{0}.
-	actionOut, _ := exec.Command("git", "reflog", "-1",
-		"--pretty=format:%gs").Output()
-	action := strings.TrimSpace(string(actionOut))
-
 	return &UndoInfo{
 		CurrentHash:     curParts[0],
 		CurrentSubject:  curParts[1],
@@ -70,6 +85,9 @@ func GetUndoInfo() (*UndoInfo, error) {
 // RunUndo resets HEAD to HEAD@{1} using --soft so work is preserved in the
 // index. This undoes the last commit/merge/rebase without destroying changes.
 func RunUndo() error {
+	if _, err := undoAction(); err != nil {
+		return err
+	}
 	// Refuse on dirty tracked files (uncommitted staged changes are OK since
 	// --soft only moves HEAD; but unstaged changes could conflict).
 	statusOut, sErr := exec.Command("git", "status", "--porcelain", "--untracked-files=no").Output()
@@ -96,6 +114,9 @@ func RunUndo() error {
 
 // RunUndoHard resets HEAD to HEAD@{1} using --hard, discarding all changes.
 func RunUndoHard() error {
+	if _, err := undoAction(); err != nil {
+		return err
+	}
 	out, err := exec.Command("git", "reset", "--hard", "HEAD@{1}").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git reset --hard HEAD@{1}: %s", strings.TrimSpace(string(out)))

@@ -2,8 +2,71 @@ package git
 
 import (
 	"os"
+	"runtime"
 	"testing"
 )
+
+// Parsed paths must round-trip into git add without quoting or rename splitting.
+func TestGetFileStatusesSpecialPaths(t *testing.T) {
+	for _, path := range []string{"한글.txt", "with spaces.txt", " leading.txt", "a -> b.txt", "line\nbreak.txt", "tab\tname.txt", "quote\"name.txt", "back\\slash.txt"} {
+		t.Run(path, func(t *testing.T) {
+			if runtime.GOOS == "windows" && (path == "a -> b.txt" || path == "line\nbreak.txt" || path == "tab\tname.txt" || path == "quote\"name.txt" || path == "back\\slash.txt") {
+				t.Skip("filename is not supported on Windows")
+			}
+			cleanup := setupRepo(t)
+			defer cleanup()
+			run(t, ".", "config", "core.quotePath", "true")
+			if err := os.WriteFile(path, []byte("content\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			files, err := GetFileStatuses()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(files) != 1 || files[0].Path != path || files[0].OldPath != "" || !files[0].IsUntracked() {
+				t.Fatalf("untracked path %q did not round-trip: %+v", path, files)
+			}
+			if err := StageFile(files[0].Path); err != nil {
+				t.Fatalf("stage parsed path: %v", err)
+			}
+			files, err = GetFileStatuses()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(files) != 1 || files[0].Path != path || files[0].OldPath != "" || !files[0].IsStaged() {
+				t.Fatalf("staged path %q did not round-trip: %+v", path, files)
+			}
+		})
+	}
+}
+
+func TestGetFileStatusesRenameSpecialPaths(t *testing.T) {
+	cleanup := setupRepo(t)
+	defer cleanup()
+	oldPath, newPath := "이전 이름.txt", "새 이름.txt"
+	addCommit(t, oldPath, "rename content\n", "add original")
+	run(t, ".", "mv", oldPath, newPath)
+	if err := os.WriteFile("z.txt", []byte("untracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err := GetFileStatuses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("want rename and untracked file, got %+v", files)
+	}
+	byPath := make(map[string]FileStatus)
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+	if f := byPath[newPath]; f.OldPath != oldPath || f.Staged != 'R' {
+		t.Errorf("rename paths not preserved: %+v", files)
+	}
+	if f := byPath["z.txt"]; !f.IsUntracked() || f.OldPath != "" {
+		t.Errorf("entry following rename not preserved: %+v", files)
+	}
+}
 
 // TestFileStatusPredicates pins the byte-level porcelain column semantics that
 // the TUI relies on to classify each file as staged / unstaged / untracked.
@@ -94,8 +157,7 @@ func TestGetFileStatuses(t *testing.T) {
 	}
 }
 
-// TestGetFileStatusesRename pins the "old -> new" rename split, which populates
-// OldPath — a parsing branch with its own SplitN logic that nothing else covers.
+// TestGetFileStatusesRename checks the source and destination of a staged rename.
 func TestGetFileStatusesRename(t *testing.T) {
 	cleanup := setupRepo(t)
 	defer cleanup()

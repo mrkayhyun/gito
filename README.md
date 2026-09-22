@@ -76,7 +76,7 @@ gito worktree  Manage git worktrees (list / add / remove)
 | `commit` | 5-step wizard (type → scope → subject → body → confirm); types customizable via `gito.json` | `y` commit, `a` amend, `e` edit |
 | `log` | Scrollable commit log with detail diff | `↑/↓` move, `enter` detail, `g/G` top/bottom |
 | `branch` | Fuzzy-filter switch + create / rename / delete | `enter` switch, `^b` create, `^r` rename, `^d` delete, `^x` force-delete |
-| `status` | Stage / unstage / diff / discard | `space` toggle, `a` stage all, `d` diff, `D` discard |
+| `status` | Stage / unstage files or individual text hunks, diff / discard | `space` toggle, `a` stage all, `d` diff, `D` discard; in diff: `n/p` select hunk, `space` stage/unstage |
 | `stash` | Manage the stash list | `p` pop, `a` apply, `d` diff, `D` drop |
 | `tag` | Create (lightweight/annotated) / delete / push tags | `c` create, `p` push, `P` delete remote, `D` delete |
 | `remote` | Remote list, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` refresh |
@@ -87,6 +87,10 @@ gito worktree  Manage git worktrees (list / add / remove)
 | `cherry-pick` | Visually select commits from another branch and cherry-pick them (auto-abort on conflict) | `space` select, `a` all, `y` run |
 | `undo` | Safely undo the last git operation (soft/hard) | `s` soft, `h` hard, `y` confirm |
 | `worktree` | List / add (existing or new branch) / remove worktrees | `a` add, `n` new branch, `D` delete |
+
+`gito undo` refuses to reset immediately after a branch switch, since resetting
+to the previous HEAD would move the current branch to the other branch's commit.
+Use `git switch -` to switch back, or `gito reflog` to choose a recovery point.
 
 ## Install
 
@@ -142,6 +146,21 @@ gito commit     # write a commit interactively
 gito log        # browse history
 gito diff       # compare two branches/tags
 ```
+
+### Stage part of a file
+
+In `gito status`, select a modified text file and press `d`. Use `n` / `p` to
+select the next / previous hunk, then `space` to stage that hunk. Open a file
+under **Staged** to unstage a hunk using the same keys. The selected hunk is
+marked with `▶`; arrow keys scroll without changing the selection.
+
+Only the index is updated; your working file is preserved. After applying a
+hunk, the diff refreshes automatically. If the file or index changed since
+the preview, gito refuses the stale patch; press `r` to refresh and review it.
+
+Hunk actions support modifications to regular text files. New/deleted files,
+staged renames, binary files, mode changes, symlinks, submodules, and conflicts
+remain view-only in this screen; use file-level staging or Git for those changes.
 
 ### Launcher menu
 

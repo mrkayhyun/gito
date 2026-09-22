@@ -7,6 +7,58 @@ import (
 	"testing"
 )
 
+// A checkout changes HEAD's reflog but must never become a reset of the
+// destination branch to the source branch's tip.
+func TestUndoRejectsBranchSwitch(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		run  func() error
+	}{
+		{"preview", func() error {
+			info, err := GetUndoInfo()
+			if info != nil {
+				return nil // fail below: a reset target must not be offered
+			}
+			return err
+		}},
+		{"soft", RunUndo},
+		{"hard", RunUndoHard},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			cleanup := setupRepo(t)
+			defer cleanup()
+			run(t, ".", "checkout", "-b", "feature")
+			addCommit(t, "feature.txt", "feature\n", "feature commit")
+			run(t, ".", "checkout", "-")
+			before, err := exec.Command("git", "rev-parse", "HEAD").Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if operation.name == "hard" {
+				if err := os.WriteFile("README.md", []byte("keep my work\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := operation.run(); err == nil {
+				t.Error("undo must reject a branch switch")
+			}
+			after, err := exec.Command("git", "rev-parse", "HEAD").Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Error("undo moved the destination branch after a checkout")
+			}
+			if operation.name == "hard" {
+				content, err := os.ReadFile("README.md")
+				if err != nil || string(content) != "keep my work\n" {
+					t.Errorf("rejected hard undo must preserve working files: %q, %v", content, err)
+				}
+			}
+		})
+	}
+}
+
 func TestGetUndoInfoAfterCommit(t *testing.T) {
 	cleanup := setupRepo(t)
 	defer cleanup()

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -54,8 +55,14 @@ type statusModel struct {
 	cursor  int
 	pane    statusPane
 
-	vp      viewport.Model
-	vpReady bool
+	vp           viewport.Model
+	vpReady      bool
+	patch        git.FilePatch
+	hunk         int
+	diffEntry    statusEntry
+	diffRequest  uint64
+	diffBusy     bool
+	diffApplying bool
 
 	confirmDiscard bool
 	errMsg         string
@@ -66,7 +73,15 @@ type statusModel struct {
 
 type statusEntriesMsg struct{ entries []statusEntry }
 type statusErrMsg struct{ err error }
-type statusDiffMsg struct{ content string }
+type statusDiffMsg struct {
+	patch   git.FilePatch
+	request uint64
+	err     error
+}
+type statusHunkDoneMsg struct {
+	request uint64
+	err     error
+}
 
 func doStatusLoad() tea.Cmd {
 	return func() tea.Msg {
@@ -94,19 +109,13 @@ func doStatusLoad() tea.Cmd {
 	}
 }
 
-func doStatusDiff(e statusEntry) tea.Cmd {
+func doStatusDiff(e statusEntry, request uint64) tea.Cmd {
 	return func() tea.Msg {
 		if e.section == secUntracked {
-			return statusDiffMsg{i18n.T("status.untracked_note")}
+			return statusDiffMsg{patch: git.FilePatch{Content: i18n.T("status.untracked_note")}, request: request}
 		}
-		content, err := git.GetFileDiff(e.file.Path, e.section == secStaged)
-		if err != nil {
-			return statusDiffMsg{"Error: " + err.Error()}
-		}
-		if content == "" {
-			return statusDiffMsg{i18n.T("status.no_diff")}
-		}
-		return statusDiffMsg{content}
+		patch, err := git.GetFilePatch(e.file.Path, e.section == secStaged)
+		return statusDiffMsg{patch: patch, request: request, err: err}
 	}
 }
 
@@ -136,9 +145,39 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMsg = msg.err.Error()
 
 	case statusDiffMsg:
+		if m.pane != statusPaneDiff || msg.request != m.diffRequest {
+			return m, nil
+		}
+		m.diffBusy = false
+		m.patch = msg.patch
+		m.errMsg = ""
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+		}
+		if m.hunk >= len(m.patch.Hunks) {
+			m.hunk = len(m.patch.Hunks) - 1
+		}
+		if m.hunk < 0 {
+			m.hunk = 0
+		}
 		m.vp = viewport.New(m.width, m.vpHeight())
-		m.vp.SetContent(msg.content)
 		m.vpReady = true
+		m.renderHunks()
+
+	case statusHunkDoneMsg:
+		if m.pane != statusPaneDiff || msg.request != m.diffRequest {
+			return m, nil
+		}
+		m.diffApplying = false
+		m.diffBusy = false
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+			if errors.Is(msg.err, git.ErrStalePatch) {
+				m.errMsg = i18n.T("status.hunk_stale")
+			}
+			return m, nil
+		}
+		return m.loadDiff()
 
 	case tea.KeyMsg:
 		if m.pane == statusPaneDiff {
@@ -150,7 +189,7 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m statusModel) vpHeight() int {
-	h := m.height - 4
+	h := m.height - 6
 	if h < 1 {
 		return 1
 	}
@@ -158,11 +197,42 @@ func (m statusModel) vpHeight() int {
 }
 
 func (m statusModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+	if m.diffApplying {
+		return m, nil
+	}
 	switch msg.String() {
 	case "q", "esc":
 		m.pane = statusPaneList
 		m.vpReady = false
+		m.diffBusy = false
+		return m, doStatusLoad()
+	case "r":
+		if !m.diffBusy {
+			return m.loadDiff()
+		}
+	case "n", "p":
+		if m.diffBusy || len(m.patch.Hunks) == 0 {
+			return m, nil
+		}
+		if msg.String() == "n" && m.hunk+1 < len(m.patch.Hunks) {
+			m.hunk++
+		}
+		if msg.String() == "p" && m.hunk > 0 {
+			m.hunk--
+		}
+		m.renderHunks()
 		return m, nil
+	case " ":
+		if m.diffBusy || !m.vpReady || len(m.patch.Hunks) == 0 {
+			return m, nil
+		}
+		m.diffBusy, m.diffApplying = true, true
+		m.errMsg = ""
+		patch, hunk, request := m.patch, m.hunk, m.diffRequest
+		return m, func() tea.Msg { return statusHunkDoneMsg{request: request, err: git.ApplyHunk(patch, hunk)} }
 	}
 	if m.vpReady {
 		var cmd tea.Cmd
@@ -170,6 +240,44 @@ func (m statusModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+func (m statusModel) loadDiff() (tea.Model, tea.Cmd) {
+	m.diffRequest++
+	m.diffBusy = true
+	m.vpReady = false
+	m.errMsg = ""
+	return m, doStatusDiff(m.diffEntry, m.diffRequest)
+}
+
+func (m *statusModel) renderHunks() {
+	content := m.patch.Content
+	if content == "" {
+		content = i18n.T("status.no_diff")
+	}
+	lines := strings.Split(content, "\n")
+	selectedLine := -1
+	if len(m.patch.Hunks) > 0 {
+		selectedLine = m.patch.Hunks[m.hunk].StartLine
+	}
+	for i, line := range lines {
+		switch {
+		case i == selectedLine:
+			lines[i] = sectionHead.Render("▶ " + line)
+		case strings.HasPrefix(line, "@@ "):
+			lines[i] = style.Label.Render("  " + line)
+		case strings.HasPrefix(line, "+"):
+			lines[i] = stagedColor.Render("  " + line)
+		case strings.HasPrefix(line, "-"):
+			lines[i] = unstagedColor.Render("  " + line)
+		default:
+			lines[i] = "  " + line
+		}
+	}
+	m.vp.SetContent(strings.Join(lines, "\n"))
+	if selectedLine >= 0 {
+		m.vp.SetYOffset(selectedLine)
+	}
 }
 
 func (m statusModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -226,8 +334,9 @@ func (m statusModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		if m.cursor < len(m.entries) {
 			m.pane = statusPaneDiff
-			m.vpReady = false
-			return m, doStatusDiff(m.entries[m.cursor])
+			m.diffEntry = m.entries[m.cursor]
+			m.hunk = 0
+			return m.loadDiff()
 		}
 	case "D":
 		if m.cursor < len(m.entries) {
@@ -326,8 +435,8 @@ func (m statusModel) viewList() string {
 func (m statusModel) viewDiff() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito status  ›  diff") + "\n")
-	if m.cursor < len(m.entries) {
-		e := m.entries[m.cursor]
+	{
+		e := m.diffEntry
 		var c lipgloss.Style
 		switch e.section {
 		case secStaged:
@@ -339,7 +448,26 @@ func (m statusModel) viewDiff() string {
 		}
 		sb.WriteString(c.Render(e.file.Path))
 	}
-	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
+	sb.WriteString("\n")
+	hint := i18n.T("status.hunk_hint_readonly")
+	if len(m.patch.Hunks) > 0 {
+		if m.diffEntry.section == secStaged {
+			hint = i18n.T("status.hunk_hint_unstage")
+		} else {
+			hint = i18n.T("status.hunk_hint_stage")
+		}
+	}
+	sb.WriteString(style.Dimmed.Render(hint) + "\n")
+	if m.errMsg != "" {
+		sb.WriteString(style.Failure.Render(m.errMsg))
+	} else if m.diffBusy {
+		sb.WriteString(style.Dimmed.Render(i18n.T("common.loading")))
+	} else if len(m.patch.Hunks) > 0 {
+		sb.WriteString(style.Label.Render(i18n.Tf("status.hunk_position", m.hunk+1, len(m.patch.Hunks))))
+	} else if m.patch.Content != "" {
+		sb.WriteString(style.Dimmed.Render(i18n.T("status.hunk_readonly")))
+	}
+	sb.WriteString("\n\n")
 
 	if !m.vpReady {
 		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))

@@ -72,13 +72,31 @@ main.go                 // 서브커맨드 라우팅 + help
 | `commit` | 5단계 커밋 마법사(타입→스코프→제목→본문→확인), `gito.json`으로 타입 커스터마이즈 | `y` 커밋, `a` amend, `e` 편집 |
 | `log` | 스크롤 가능한 커밋 로그, 상세 diff 보기 | `↑/↓` 이동, `enter` 상세, `g/G` 처음/끝 |
 | `branch` | 퍼지 필터 브랜치 전환 + 생성/이름변경/삭제 | `enter` 전환, `^b` 생성, `^r` 이름변경, `^d` 삭제, `^x` 강제삭제 |
-| `status` | 스테이징/언스테이징/diff/discard | `space` 토글, `a` 전체 스테이지, `d` diff, `D` discard |
+| `status` | 파일 또는 텍스트 hunk 단위 스테이징/언스테이징, diff/discard | `space` 토글, `a` 전체 스테이지, `d` diff, `D` discard; diff에서 `n/p` hunk 선택, `space` 적용 |
 | `stash` | 스태시 목록 관리 | `p` pop, `a` apply, `d` diff, `D` drop |
 | `tag` | 태그 생성(경량/주석)/삭제/원격 push | `c` 생성, `p` push, `P` 원격삭제, `D` 삭제 |
 | `remote` | 원격 목록, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` 새로고침 |
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
 | `blame` | 파일 선택 후 라인별 blame | `enter` blame 보기 |
+| `undo` | 이전 HEAD로 되돌리기(soft/hard), 브랜치 전환 직후에는 차단 | `s` soft, `h` hard, `y` 확인 |
+
+`gito undo`는 브랜치 전환 직후의 reset을 차단합니다. 이때 이전 HEAD로 reset하면
+현재 브랜치가 다른 브랜치의 커밋으로 이동하기 때문입니다. 이전 브랜치로 돌아가려면
+`git switch -`를 사용하고, 복구 지점을 직접 고르려면 `gito reflog`를 사용하세요.
+
+### 파일의 일부만 스테이징하기
+
+`gito status`에서 수정된 텍스트 파일을 선택하고 `d`를 누르세요. `n` / `p`로
+다음 / 이전 hunk(변경 덩어리)를 선택하고 `space`로 스테이지합니다. **Staged**
+목록의 파일을 열면 같은 키로 hunk를 언스테이지할 수 있습니다. 선택한 hunk는
+`▶`로 표시되며, 방향키는 선택을 바꾸지 않고 화면만 스크롤합니다.
+
+작업 파일은 그대로 유지하고 index만 변경합니다. 적용 후 diff는 자동으로 갱신됩니다.
+미리보기 이후 파일이나 index가 바뀌면 적용을 중단하므로, `r`로 새로고침하고 다시 확인하세요.
+
+일반 텍스트 파일의 수정을 지원합니다. 파일 생성/삭제, 스테이징된 이름 변경, binary,
+파일 모드 변경, 심볼릭 링크, 서브모듈, 충돌은 이 화면에서 보기 전용이며 파일 단위 작업이나 Git을 사용하세요.
 
 ## 설치
 

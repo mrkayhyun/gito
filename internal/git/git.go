@@ -182,7 +182,7 @@ func IsRemoteBranch(name string) bool {
 
 // ── FileStatus ────────────────────────────────────────────────────────────────
 
-// FileStatus represents one entry from `git status --porcelain`.
+// FileStatus represents one entry from `git status --porcelain=v1 -z`.
 // Staged = X column, Unstaged = Y column.
 type FileStatus struct {
 	Staged   byte
@@ -204,21 +204,28 @@ func (f FileStatus) IsUntracked() bool {
 }
 
 func GetFileStatuses() ([]FileStatus, error) {
-	out, err := exec.Command("git", "status", "--porcelain").Output()
+	out, err := exec.Command("git", "status", "--porcelain=v1", "-z").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
 	var files []FileStatus
-	for _, line := range strings.Split(string(out), "\n") {
+	records := strings.Split(string(out), "\x00")
+	for i := 0; i < len(records); i++ {
+		line := records[i]
 		if len(line) < 4 {
 			continue
 		}
 		x, y := line[0], line[1]
 		path := line[3:]
 		oldPath := ""
-		if strings.Contains(path, " -> ") {
-			parts := strings.SplitN(path, " -> ", 2)
-			oldPath, path = parts[0], parts[1]
+		if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
+			// With -z, the destination comes first, followed by the raw
+			// source path in a separate NUL-terminated record.
+			if i+1 >= len(records) || records[i+1] == "" {
+				return nil, fmt.Errorf("git status: missing source path for rename or copy")
+			}
+			i++
+			oldPath = records[i]
 		}
 		files = append(files, FileStatus{Staged: x, Unstaged: y, Path: path, OldPath: oldPath})
 	}
