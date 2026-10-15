@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	stashRefStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	stashBranchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	stashMsgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
+	stashRefStyle    = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	stashBranchStyle = lipgloss.NewStyle().Foreground(style.Green)
+	stashMsgStyle    = lipgloss.NewStyle().Foreground(style.Text)
 )
 
 // ── panes ─────────────────────────────────────────────────────────────────────

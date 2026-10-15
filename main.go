@@ -19,8 +19,18 @@ func main() {
 	// Resolve the UI language before any output: first from the environment
 	// (auto-detection), then let an optional gito.json "lang" field override it.
 	i18n.Init()
-	if cfg := config.Load(); cfg.Lang != "" {
+	cfg := config.Load()
+	if cfg.Lang != "" {
 		i18n.SetLang(i18n.Parse(cfg.Lang))
+	}
+	// Colors adapt to the terminal background; GITO_THEME (or gito.json
+	// "theme") forces light/dark where detection is unreliable.
+	theme := cfg.Theme
+	if env := os.Getenv("GITO_THEME"); env != "" {
+		theme = env
+	}
+	if !style.SetTheme(theme) {
+		style.SetTheme("auto") // unknown value: fall back to detection
 	}
 
 	// No arguments → launch the interactive command picker.

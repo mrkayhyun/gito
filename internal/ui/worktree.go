@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	wtPathStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#3498DB")).Bold(true)
-	wtBranchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	wtHashStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F"))
+	wtPathStyle   = lipgloss.NewStyle().Foreground(style.Blue).Bold(true)
+	wtBranchStyle = lipgloss.NewStyle().Foreground(style.Green)
+	wtHashStyle   = lipgloss.NewStyle().Foreground(style.Yellow)
 )
 
 type wtPane int

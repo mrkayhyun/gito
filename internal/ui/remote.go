@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	remoteNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	remoteURLStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	aheadStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
-	behindStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
+	remoteNameStyle = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	remoteURLStyle  = lipgloss.NewStyle().Foreground(style.Text)
+	aheadStyle      = lipgloss.NewStyle().Foreground(style.GreenLite).Bold(true)
+	behindStyle     = lipgloss.NewStyle().Foreground(style.Red).Bold(true)
 )
 
 type remotePane int

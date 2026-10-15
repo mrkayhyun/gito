@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	reflogHashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	reflogSelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8E44AD"))
-	reflogActStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	reflogSubStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
+	reflogHashStyle = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	reflogSelStyle  = lipgloss.NewStyle().Foreground(style.PurpleDk)
+	reflogActStyle  = lipgloss.NewStyle().Foreground(style.Green)
+	reflogSubStyle  = lipgloss.NewStyle().Foreground(style.Text)
 )
 
 type reflogMode int

@@ -17,17 +17,17 @@ import (
 // ── lipgloss styles for the commit list ──────────────────────────────────────
 
 var (
-	hashStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	dateStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	msgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	authorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#636363"))
+	hashStyle   = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	dateStyle   = lipgloss.NewStyle().Foreground(style.Green)
+	msgStyle    = lipgloss.NewStyle().Foreground(style.Text)
+	authorStyle = lipgloss.NewStyle().Foreground(style.MutedAlt)
 
-	selBar     = lipgloss.NewStyle().Background(lipgloss.Color("#312E55"))
-	selHash    = hashStyle.Background(lipgloss.Color("#312E55"))
-	selDate    = dateStyle.Background(lipgloss.Color("#312E55"))
-	selMsg     = msgStyle.Bold(true).Background(lipgloss.Color("#312E55"))
-	selAuthor  = authorStyle.Background(lipgloss.Color("#312E55"))
-	cursorGlyp = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true)
+	selBar     = lipgloss.NewStyle().Background(style.SelBg)
+	selHash    = hashStyle.Background(style.SelBg)
+	selDate    = dateStyle.Background(style.SelBg)
+	selMsg     = msgStyle.Bold(true).Background(style.SelBg)
+	selAuthor  = authorStyle.Background(style.SelBg)
+	cursorGlyp = lipgloss.NewStyle().Foreground(style.Accent).Bold(true)
 )
 
 // ── model ────────────────────────────────────────────────────────────────────

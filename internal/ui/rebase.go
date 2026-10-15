@@ -13,15 +13,15 @@ import (
 )
 
 var (
-	rebaseHashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	rebaseSubStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	rebaseDropStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#626262")).Strikethrough(true)
+	rebaseHashStyle = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	rebaseSubStyle  = lipgloss.NewStyle().Foreground(style.Text)
+	rebaseDropStyle = lipgloss.NewStyle().Foreground(style.Muted).Strikethrough(true)
 
-	rebasePickStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60")).Bold(true)
-	rebaseRewordStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3498DB")).Bold(true)
-	rebaseSquashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E67E22")).Bold(true)
-	rebaseFixupStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B59B6")).Bold(true)
-	rebaseDropTag     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true)
+	rebasePickStyle   = lipgloss.NewStyle().Foreground(style.Green).Bold(true)
+	rebaseRewordStyle = lipgloss.NewStyle().Foreground(style.Blue).Bold(true)
+	rebaseSquashStyle = lipgloss.NewStyle().Foreground(style.OrangeDk).Bold(true)
+	rebaseFixupStyle  = lipgloss.NewStyle().Foreground(style.Purple).Bold(true)
+	rebaseDropTag     = lipgloss.NewStyle().Foreground(style.Pink).Bold(true)
 )
 
 type rebaseMode int
