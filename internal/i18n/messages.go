@@ -133,7 +133,10 @@ var en = map[string]string{
 	"remote.none":            "  No remotes configured",
 
 	// ── log (log.go) ───────────────────────────────────────────────────────
-	"log.hint_list":   "↑/↓ j/k: move   g/G: top/bottom   enter: detail   q/esc: quit",
+	"log.hint_list":   "↑/↓ j/k: move   g/G: top/bottom   /: search   enter: detail   q/esc: quit",
+	"log.hint_search": "type to filter by subject, author or hash   enter: keep filter   esc: clear",
+	"log.ph_search":   "subject, author or hash...",
+	"log.no_match":    "  No matching commits",
 	"log.hint_detail": "↑/↓ j/k: scroll   PgUp/PgDn: page   q/esc: back to list",
 	"log.none":        "No commits yet.",
 
@@ -295,7 +298,10 @@ var ko = map[string]string{
 	"remote.fetching":        "가져오는 중...",
 	"remote.none":            "  설정된 원격이 없습니다",
 
-	"log.hint_list":   "↑/↓ j/k: 이동   g/G: 처음/끝   enter: 상세   q/esc: 종료",
+	"log.hint_list":   "↑/↓ j/k: 이동   g/G: 처음/끝   /: 검색   enter: 상세   q/esc: 종료",
+	"log.hint_search": "제목·작성자·해시로 필터   enter: 필터 유지   esc: 지우기",
+	"log.ph_search":   "제목, 작성자 또는 해시...",
+	"log.no_match":    "  일치하는 커밋이 없습니다",
 	"log.hint_detail": "↑/↓ j/k: 스크롤   PgUp/PgDn: 페이지   q/esc: 목록으로",
 	"log.none":        "아직 커밋이 없습니다.",
 
@@ -452,7 +458,10 @@ var ja = map[string]string{
 	"remote.fetching":        "取得中...",
 	"remote.none":            "  リモートが設定されていません",
 
-	"log.hint_list":   "↑/↓ j/k: 移動   g/G: 先頭/末尾   enter: 詳細   q/esc: 終了",
+	"log.hint_list":   "↑/↓ j/k: 移動   g/G: 先頭/末尾   /: 検索   enter: 詳細   q/esc: 終了",
+	"log.hint_search": "件名・作者・ハッシュで絞り込み   enter: 絞り込みを保持   esc: クリア",
+	"log.ph_search":   "件名、作者、ハッシュ...",
+	"log.no_match":    "  一致するコミットがありません",
 	"log.hint_detail": "↑/↓ j/k: スクロール   PgUp/PgDn: ページ   q/esc: 一覧へ",
 	"log.none":        "まだコミットがありません。",
 
@@ -609,7 +618,10 @@ var zh = map[string]string{
 	"remote.fetching":        "获取中...",
 	"remote.none":            "  未配置远程",
 
-	"log.hint_list":   "↑/↓ j/k: 移动   g/G: 首/尾   enter: 详情   q/esc: 退出",
+	"log.hint_list":   "↑/↓ j/k: 移动   g/G: 首/尾   /: 搜索   enter: 详情   q/esc: 退出",
+	"log.hint_search": "按标题、作者或哈希过滤   enter: 保留过滤   esc: 清除",
+	"log.ph_search":   "标题、作者或哈希...",
+	"log.no_match":    "  没有匹配的提交",
 	"log.hint_detail": "↑/↓ j/k: 滚动   PgUp/PgDn: 翻页   q/esc: 返回列表",
 	"log.none":        "还没有提交。",
 

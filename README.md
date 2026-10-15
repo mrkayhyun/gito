@@ -74,7 +74,7 @@ gito worktree  Manage git worktrees (list / add / remove)
 | Command | What it does | Key bindings |
 |------|------|---------|
 | `commit` | 5-step wizard (type → scope → subject → body → confirm); types customizable via `gito.json` | `y` commit, `a` amend, `e` edit |
-| `log` | Scrollable commit log with detail diff | `↑/↓` move, `enter` detail, `g/G` top/bottom |
+| `log` | Scrollable commit log with detail diff; filter by subject, author or hash | `↑/↓` move, `/` search, `enter` detail, `g/G` top/bottom |
 | `branch` | Fuzzy-filter switch + create / rename / delete | `enter` switch, `^b` create, `^r` rename, `^d` delete, `^x` force-delete |
 | `status` | Stage / unstage files or individual text hunks, diff / discard | `space` toggle, `a` stage all, `d` diff, `D` discard; in diff: `n/p` select hunk, `space` stage/unstage |
 | `stash` | Manage the stash list | `p` pop, `a` apply, `d` diff, `D` drop |

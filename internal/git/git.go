@@ -23,6 +23,13 @@ func IsRepo() bool {
 	return strings.TrimSpace(string(out)) == "true"
 }
 
+// HasCommits reports whether HEAD resolves to a commit. It is false in a
+// freshly initialized repository (unborn branch), where `git log` and
+// `git reflog` exit 128 instead of printing nothing.
+func HasCommits() bool {
+	return exec.Command("git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}").Run() == nil
+}
+
 // CommitEntry holds parsed fields for a single git commit.
 type CommitEntry struct {
 	Hash    string // full 40-char hash
@@ -33,6 +40,9 @@ type CommitEntry struct {
 }
 
 func GetLogEntries(n int) ([]CommitEntry, error) {
+	if !HasCommits() {
+		return nil, nil
+	}
 	out, err := exec.Command("git", "log",
 		fmt.Sprintf("--max-count=%d", n),
 		"--pretty=format:%H%x00%h%x00%ad%x00%s%x00%an",
@@ -626,6 +636,9 @@ type ReflogEntry struct {
 }
 
 func GetReflog(n int) ([]ReflogEntry, error) {
+	if !HasCommits() {
+		return nil, nil
+	}
 	out, err := exec.Command("git", "reflog",
 		fmt.Sprintf("--max-count=%d", n),
 		"--pretty=format:%h%x00%gd%x00%gs%x00%s",

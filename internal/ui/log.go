@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -44,12 +45,52 @@ type logModel struct {
 	offset  int // first visible row index
 	pane    logPane
 
+	// search narrows the list; searching is true while the input has focus.
+	search    textinput.Model
+	searching bool
+
 	vp        viewport.Model
 	vpReady   bool
 	vpContent string // raw content waiting to be set when vp is init'd
 
 	width  int
 	height int
+}
+
+func newLogModel(commits []git.CommitEntry) logModel {
+	search := textinput.New()
+	search.Placeholder = i18n.T("log.ph_search")
+	search.CharLimit = 200
+	return logModel{commits: commits, search: search}
+}
+
+// matchCommit reports whether c matches every whitespace-separated term of
+// query (case-insensitive). A term matches a substring of the subject or
+// author, or a prefix of the full hash.
+func matchCommit(c git.CommitEntry, query string) bool {
+	for _, term := range strings.Fields(strings.ToLower(query)) {
+		if !strings.Contains(strings.ToLower(c.Subject), term) &&
+			!strings.Contains(strings.ToLower(c.Author), term) &&
+			!strings.HasPrefix(strings.ToLower(c.Hash), term) {
+			return false
+		}
+	}
+	return true
+}
+
+// filtered returns the commits matching the current search query.
+func (m logModel) filtered() []git.CommitEntry {
+	q := m.search.Value()
+	if strings.TrimSpace(q) == "" {
+		return m.commits
+	}
+	var out []git.CommitEntry
+	for _, c := range m.commits {
+		if matchCommit(c, q) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // ── tea messages ─────────────────────────────────────────────────────────────
@@ -99,9 +140,45 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pane == paneDetail {
 			return m.updateDetail(msg)
 		}
+		if m.searching {
+			return m.updateSearch(msg)
+		}
 		return m.updateList(msg)
 	}
+	if m.searching {
+		var cmd tea.Cmd
+		m.search, cmd = m.search.Update(msg)
+		return m, cmd
+	}
 	return m, nil
+}
+
+// updateSearch handles keys while the search input is focused. The list is
+// filtered live; enter keeps the filter and returns to navigation, esc clears it.
+func (m logModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.search.SetValue("")
+		m.search.Blur()
+		m.searching = false
+		m.cursor, m.offset = 0, 0
+		return m, nil
+	case "enter":
+		m.search.Blur()
+		m.searching = false
+		return m, nil
+	case "up", "down":
+		return m.updateList(msg)
+	}
+	prev := m.search.Value()
+	var cmd tea.Cmd
+	m.search, cmd = m.search.Update(msg)
+	if m.search.Value() != prev {
+		m.cursor, m.offset = 0, 0
+	}
+	return m, cmd
 }
 
 func (m logModel) detailHeight() int {
@@ -114,6 +191,9 @@ func (m logModel) detailHeight() int {
 
 func (m logModel) visibleRows() int {
 	v := m.height - 3 // title + hint + blank
+	if m.searching || m.search.Value() != "" {
+		v -= 2 // search line + blank
+	}
 	if v < 1 {
 		return 10
 	}
@@ -122,9 +202,21 @@ func (m logModel) visibleRows() int {
 
 func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	vis := m.visibleRows()
+	commits := m.filtered()
 	switch msg.String() {
-	case "ctrl+c", "q", "esc":
+	case "esc":
+		// esc first clears an active filter, then quits.
+		if m.search.Value() != "" {
+			m.search.SetValue("")
+			m.cursor, m.offset = 0, 0
+			return m, nil
+		}
 		return m, tea.Quit
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case "/":
+		m.searching = true
+		return m, m.search.Focus()
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -133,7 +225,7 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "down", "j":
-		if m.cursor < len(m.commits)-1 {
+		if m.cursor < len(commits)-1 {
 			m.cursor++
 			if m.cursor >= m.offset+vis {
 				m.offset = m.cursor - vis + 1
@@ -143,17 +235,20 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.offset = 0
 	case "G": // jump to bottom
-		m.cursor = len(m.commits) - 1
+		m.cursor = len(commits) - 1
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
 		if m.cursor-vis+1 > 0 {
 			m.offset = m.cursor - vis + 1
 		}
 	case "enter":
-		if len(m.commits) == 0 {
+		if m.cursor >= len(commits) {
 			return m, nil
 		}
 		m.pane = paneDetail
 		m.vpReady = false
-		return m, fetchDetail(m.commits[m.cursor].Hash)
+		return m, fetchDetail(commits[m.cursor].Hash)
 	}
 	return m, nil
 }
@@ -186,16 +281,33 @@ func (m logModel) viewList() string {
 	var sb strings.Builder
 
 	// header
+	commits := m.filtered()
 	sb.WriteString(style.Title.Render("gito log"))
-	sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
+	if len(commits) == len(m.commits) {
+		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
+	} else {
+		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d / %d commits", len(commits), len(m.commits))))
+	}
 	sb.WriteString("\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_list")))
+	if m.searching {
+		sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_search")))
+	} else {
+		sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_list")))
+	}
 	sb.WriteString("\n\n")
+	if m.searching || m.search.Value() != "" {
+		sb.WriteString(style.Label.Render(i18n.T("common.search")) + m.search.View() + "\n\n")
+	}
+
+	if len(commits) == 0 {
+		sb.WriteString(style.Dimmed.Render(i18n.T("log.no_match")) + "\n")
+		return sb.String()
+	}
 
 	vis := m.visibleRows()
 	end := m.offset + vis
-	if end > len(m.commits) {
-		end = len(m.commits)
+	if end > len(commits) {
+		end = len(commits)
 	}
 
 	maxSubject := m.width - 30 // leave room for hash + date + author
@@ -204,7 +316,7 @@ func (m logModel) viewList() string {
 	}
 
 	for i := m.offset; i < end; i++ {
-		c := m.commits[i]
+		c := commits[i]
 		subj := c.Subject
 		if len([]rune(subj)) > maxSubject {
 			subj = string([]rune(subj)[:maxSubject-1]) + "…"
@@ -231,7 +343,7 @@ func (m logModel) viewList() string {
 }
 
 func (m logModel) viewDetail() string {
-	c := m.commits[m.cursor]
+	c := m.filtered()[m.cursor]
 
 	header := style.Title.Render("gito log  ›  detail") + "\n" +
 		hashStyle.Render(c.Short) + "  " +
@@ -259,7 +371,7 @@ func RunLog() {
 		return
 	}
 
-	m := logModel{commits: entries}
+	m := newLogModel(entries)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
