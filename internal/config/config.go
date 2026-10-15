@@ -6,6 +6,7 @@
 //
 //	{
 //	  "lang": "en",
+//	  "theme": "auto",
 //	  "commit_types": [
 //	    {"key": "feat",  "label": "feat   New feature"},
 //	    {"key": "fix",   "label": "fix    Bug fix"}
@@ -30,7 +31,10 @@ type CommitType struct {
 type Config struct {
 	// Lang optionally overrides the auto-detected UI language ("en", "ko",
 	// "ja", "zh"). When empty, the environment-detected language is used.
-	Lang        string       `json:"lang"`
+	Lang string `json:"lang"`
+	// Theme selects the color palette: "auto" (default, detect the terminal
+	// background), "light" or "dark". GITO_THEME in the environment wins.
+	Theme       string       `json:"theme"`
 	CommitTypes []CommitType `json:"commit_types"`
 }
 

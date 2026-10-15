@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	undoHashStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	undoSubStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	undoActionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3498DB")).Bold(true)
+	undoHashStyle   = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	undoSubStyle    = lipgloss.NewStyle().Foreground(style.Text)
+	undoActionStyle = lipgloss.NewStyle().Foreground(style.Blue).Bold(true)
 )
 
 type undoPane int

@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	cpHashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	cpSubStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	cpDateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	cpPickStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true)
+	cpHashStyle = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	cpSubStyle  = lipgloss.NewStyle().Foreground(style.Text)
+	cpDateStyle = lipgloss.NewStyle().Foreground(style.Green)
+	cpPickStyle = lipgloss.NewStyle().Foreground(style.GreenOK).Bold(true)
 )
 
 type cpPane int

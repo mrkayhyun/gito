@@ -17,11 +17,11 @@ import (
 // ── styles ────────────────────────────────────────────────────────────────────
 
 var (
-	stagedColor    = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71"))
-	unstagedColor  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C"))
-	untrackedColor = lipgloss.NewStyle().Foreground(lipgloss.Color("#F39C12"))
-	sectionHead    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9B59B6"))
-	selRowBg       = lipgloss.NewStyle().Background(lipgloss.Color("#1E1B2E"))
+	stagedColor    = lipgloss.NewStyle().Foreground(style.GreenLite)
+	unstagedColor  = lipgloss.NewStyle().Foreground(style.Red)
+	untrackedColor = lipgloss.NewStyle().Foreground(style.Orange)
+	sectionHead    = lipgloss.NewStyle().Bold(true).Foreground(style.Purple)
+	selRowBg       = lipgloss.NewStyle().Background(style.PanelBg)
 )
 
 // ── data ─────────────────────────────────────────────────────────────────────

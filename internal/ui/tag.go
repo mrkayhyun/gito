@@ -15,11 +15,11 @@ import (
 )
 
 var (
-	tagNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	tagHashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8E44AD"))
-	tagDateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
-	tagMsgStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECECEC"))
-	tagKindStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#636363"))
+	tagNameStyle = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	tagHashStyle = lipgloss.NewStyle().Foreground(style.PurpleDk)
+	tagDateStyle = lipgloss.NewStyle().Foreground(style.Green)
+	tagMsgStyle  = lipgloss.NewStyle().Foreground(style.Text)
+	tagKindStyle = lipgloss.NewStyle().Foreground(style.MutedAlt)
 )
 
 // ── panes ─────────────────────────────────────────────────────────────────────

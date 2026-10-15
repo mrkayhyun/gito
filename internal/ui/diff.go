@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	refStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F")).Bold(true)
-	refBaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
-	refTgtStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
+	refStyle     = lipgloss.NewStyle().Foreground(style.Yellow).Bold(true)
+	refBaseStyle = lipgloss.NewStyle().Foreground(style.Red).Bold(true)
+	refTgtStyle  = lipgloss.NewStyle().Foreground(style.GreenLite).Bold(true)
 )
 
 type diffPane int
