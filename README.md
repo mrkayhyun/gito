@@ -56,7 +56,7 @@ place to learn Go + TUI development.
 
 ```
 gito commit    Interactive commit wizard (5-step, config-driven types)
-gito log       Scrollable log viewer  (↑/↓ navigate, enter: detail)
+gito log       Scrollable log viewer  (/ search, enter: detail; optional [path...])
 gito branch    Fuzzy branch switcher / create / rename / delete
 gito status    Interactive stage / unstage / diff / discard
 gito stash     Stash list  (pop / apply / show diff / drop)
@@ -64,7 +64,7 @@ gito tag       Tag manager (create / delete / push / show diff)
 gito remote    Remote list (fetch / ahead-behind status)
 gito diff      Compare two refs (branch/tag) and view the diff
 gito reflog    Browse reflog and recover commits into a new branch
-gito blame     Pick a file and view line-by-line blame
+gito blame     Pick a file (or pass one) and view line-by-line blame
 gito rebase    Safe interactive rebase (reorder / squash / drop / reword)
 gito cherry-pick  Cherry-pick commits from another branch (auto-abort on conflict)
 gito undo      Safely undo the last git operation (soft/hard)
@@ -74,7 +74,7 @@ gito worktree  Manage git worktrees (list / add / remove)
 | Command | What it does | Key bindings |
 |------|------|---------|
 | `commit` | 5-step wizard (type → scope → subject → body → confirm); types customizable via `gito.json` | `y` commit, `a` amend, `e` edit |
-| `log` | Scrollable commit log with detail diff; filter by subject, author or hash | `↑/↓` move, `/` search, `enter` detail, `g/G` top/bottom |
+| `log` | Scrollable commit log with detail diff; filter by subject, author or hash (enter searches the full history); `gito log <path>...` limits to commits touching those paths | `↑/↓` move, `/` search, `enter` detail, `g/G` top/bottom |
 | `branch` | Fuzzy-filter switch + create / rename / delete | `enter` switch, `^b` create, `^r` rename, `^d` delete, `^x` force-delete |
 | `status` | Stage / unstage files or individual text hunks, diff / discard | `space` toggle, `a` stage all, `d` diff, `D` discard; in diff: `n/p` select hunk, `space` stage/unstage |
 | `stash` | Manage the stash list | `p` pop, `a` apply, `d` diff, `D` drop |
@@ -82,7 +82,7 @@ gito worktree  Manage git worktrees (list / add / remove)
 | `remote` | Remote list, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` refresh |
 | `diff` | Pick two refs (branch/tag) and compare | `enter` select (base → target) |
 | `reflog` | Browse reflog and recover commits (non-destructive: creates a new branch) | `b` branch from here |
-| `blame` | Pick a file and view line-by-line blame | `enter` view blame |
+| `blame` | Pick a file and view line-by-line blame; `gito blame <file>` opens it directly | `enter` view blame |
 | `rebase` | Safe interactive rebase: reorder / squash / fixup / drop / reword, with a backup ref created before running | `p/r/s/f/d` actions, `K/J` move, `y` run |
 | `cherry-pick` | Visually select commits from another branch and cherry-pick them (auto-abort on conflict) | `space` select, `a` all, `y` run |
 | `undo` | Safely undo the last git operation (soft/hard) | `s` soft, `h` hard, `y` confirm |
@@ -144,7 +144,20 @@ Run any subcommand from inside a Git repository:
 gito status     # stage / review changes
 gito commit     # write a commit interactively
 gito log        # browse history
+gito log src/   # only commits touching src/
+gito blame main.go   # blame one file directly
 gito diff       # compare two branches/tags
+```
+
+### Shell completion
+
+```bash
+# bash (~/.bashrc)
+source <(gito completion bash)
+# zsh (~/.zshrc, after compinit)
+source <(gito completion zsh)
+# fish
+gito completion fish > ~/.config/fish/completions/gito.fish
 ```
 
 ### Stage part of a file
@@ -196,6 +209,7 @@ Define commit types to match your team's conventions. Config is resolved in this
 ```json
 {
   "lang": "en",
+  "theme": "auto",
   "commit_types": [
     {"key": "feat", "label": "feat      A new feature"},
     {"key": "fix",  "label": "fix       A bug fix"},
@@ -206,6 +220,10 @@ Define commit types to match your team's conventions. Config is resolved in this
 
 Without config, gito uses Conventional Commits defaults (feat/fix/docs/style/refactor/test/chore).
 The `lang` field (`en` / `ko` / `ja` / `zh`) overrides locale auto-detection; you can also set `GITO_LANG`.
+
+Colors adapt to light and dark terminal backgrounds automatically. If your terminal does not report its
+background (some SSH/tmux setups), force it with `"theme": "light"` / `"dark"` or `GITO_THEME=light|dark`
+(the environment variable wins). `NO_COLOR=1` disables colors entirely.
 
 ## Architecture
 

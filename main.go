@@ -39,7 +39,7 @@ func main() {
 		if cmd == "" {
 			return // user quit the menu
 		}
-		dispatch(cmd)
+		dispatch(cmd, nil)
 		return
 	}
 
@@ -50,19 +50,32 @@ func main() {
 		fmt.Printf("gito %s\n", version)
 	case "menu":
 		if cmd := ui.RunMenu(); cmd != "" {
-			dispatch(cmd)
+			dispatch(cmd, nil)
+		}
+	case "completion":
+		if err := writeCompletion(os.Stdout, os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("completion.usage")))
+			os.Exit(1)
 		}
 	default:
-		dispatch(os.Args[1])
+		dispatch(os.Args[1], os.Args[2:])
 	}
 }
 
+// argCommands lists the subcommands that accept positional arguments; every
+// other command rejects them rather than silently ignoring them.
+var argCommands = map[string]bool{"log": true, "blame": true}
+
 // dispatch runs a subcommand by name. All subcommands require a git repository,
 // so it verifies that first and prints a friendly message otherwise.
-func dispatch(cmd string) {
+func dispatch(cmd string, args []string) {
 	if !isKnown(cmd) {
 		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("err.unknown_command")+cmd)+"\n")
 		printHelp()
+		os.Exit(1)
+	}
+	if len(args) > 0 && !argCommands[cmd] {
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.Tf("err.no_args", cmd)))
 		os.Exit(1)
 	}
 
@@ -76,7 +89,7 @@ func dispatch(cmd string) {
 	case "commit":
 		ui.RunCommit()
 	case "log":
-		ui.RunLog()
+		ui.RunLog(args)
 	case "branch":
 		ui.RunBranch()
 	case "status":
@@ -92,7 +105,7 @@ func dispatch(cmd string) {
 	case "reflog":
 		ui.RunReflog()
 	case "blame":
-		ui.RunBlame()
+		ui.RunBlame(args)
 	case "rebase":
 		ui.RunRebase()
 	case "cherry-pick":
@@ -123,12 +136,16 @@ func printHelp() {
 	for _, item := range ui.MenuItems {
 		sb.WriteString(fmt.Sprintf("  gito %-8s %s\n", item.Key, item.Desc()))
 	}
+	sb.WriteString("\nArguments:\n")
+	sb.WriteString("  gito log [path...]           " + i18n.T("help.log_args") + "\n")
+	sb.WriteString("  gito blame [file]            " + i18n.T("help.blame_args") + "\n")
 	sb.WriteString("\nOther:\n")
+	sb.WriteString("  gito completion bash|zsh|fish  " + i18n.T("help.completion") + "\n")
 	sb.WriteString("  gito menu       " + i18n.T("help.menu") + "\n")
 	sb.WriteString("  gito version    " + i18n.T("help.version") + "\n")
 	sb.WriteString("  gito help       " + i18n.T("help.help") + "\n\n")
 	sb.WriteString("Config (optional):\n")
 	sb.WriteString("  ./gito.json  or  ~/.config/gito/config.json\n")
-	sb.WriteString("  { \"lang\": \"en\", \"commit_types\": [ {\"key\": \"feat\", \"label\": \"feat  ...\"} ] }\n")
+	sb.WriteString("  { \"lang\": \"en\", \"theme\": \"auto|light|dark\", \"commit_types\": [ {\"key\": \"feat\", \"label\": \"feat  ...\"} ] }\n")
 	fmt.Print(sb.String())
 }

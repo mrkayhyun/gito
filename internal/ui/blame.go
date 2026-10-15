@@ -27,6 +27,9 @@ type blameModel struct {
 	offset   int
 	pane     blamePane
 	selected string
+	// direct is set by `gito blame <file>`: the view opens immediately and
+	// q/esc exit instead of returning to the file picker.
+	direct bool
 
 	vp      viewport.Model
 	vpReady bool
@@ -49,7 +52,12 @@ func doBlame(path string) tea.Cmd {
 	}
 }
 
-func (m blameModel) Init() tea.Cmd { return textinput.Blink }
+func (m blameModel) Init() tea.Cmd {
+	if m.direct {
+		return doBlame(m.selected)
+	}
+	return textinput.Blink
+}
 
 func (m blameModel) filtered() []string {
 	q := strings.ToLower(m.filter.Value())
@@ -99,7 +107,12 @@ func (m blameModel) blameVPHeight() int {
 
 func (m blameModel) updateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
 	case "q", "esc":
+		if m.direct {
+			return m, tea.Quit
+		}
 		m.pane = blamePanePick
 		m.vpReady = false
 		return m, nil
@@ -198,7 +211,11 @@ func (m blameModel) viewPick() string {
 func (m blameModel) viewBlame() string {
 	var sb strings.Builder
 	sb.WriteString(style.Title.Render("gito blame  ›  ") + style.Label.Render(m.selected) + "\n")
-	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
+	hint := "hint.scroll_back"
+	if m.direct {
+		hint = "hint.scroll_quit"
+	}
+	sb.WriteString(style.Dimmed.Render(i18n.T(hint)) + "\n\n")
 	if !m.vpReady {
 		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
 		return sb.String()
@@ -207,7 +224,23 @@ func (m blameModel) viewBlame() string {
 	return sb.String()
 }
 
-func RunBlame() {
+// RunBlame opens the blame viewer. With a file argument (`gito blame <file>`)
+// it skips the picker and shows that file directly.
+func RunBlame(args []string) {
+	if len(args) > 1 {
+		fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.T("blame.one_file")))
+		os.Exit(1)
+	}
+	if len(args) == 1 {
+		path := args[0]
+		if !git.IsTrackedFile(path) {
+			fmt.Fprintln(os.Stderr, style.Failure.Render(i18n.Tf("blame.not_tracked", path)))
+			os.Exit(1)
+		}
+		runBlameProgram(blameModel{selected: path, pane: blamePaneView, direct: true})
+		return
+	}
+
 	files, err := git.ListTrackedFiles()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -222,7 +255,11 @@ func RunBlame() {
 	filter.CharLimit = 200
 	filter.Focus()
 
-	p := tea.NewProgram(blameModel{files: files, filter: filter}, tea.WithAltScreen())
+	runBlameProgram(blameModel{files: files, filter: filter})
+}
+
+func runBlameProgram(m blameModel) {
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

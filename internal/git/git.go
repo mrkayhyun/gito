@@ -39,38 +39,6 @@ type CommitEntry struct {
 	Author  string // author name
 }
 
-func GetLogEntries(n int) ([]CommitEntry, error) {
-	if !HasCommits() {
-		return nil, nil
-	}
-	out, err := exec.Command("git", "log",
-		fmt.Sprintf("--max-count=%d", n),
-		"--pretty=format:%H%x00%h%x00%ad%x00%s%x00%an",
-		"--date=short",
-	).Output()
-	if err != nil {
-		return nil, fmt.Errorf("git log: %w", err)
-	}
-	var entries []CommitEntry
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\x00", 5)
-		if len(parts) < 5 {
-			continue
-		}
-		entries = append(entries, CommitEntry{
-			Hash:    parts[0],
-			Short:   parts[1],
-			Date:    parts[2],
-			Subject: parts[3],
-			Author:  parts[4],
-		})
-	}
-	return entries, nil
-}
-
 func GetCommitDetail(hash string) (string, error) {
 	out, err := exec.Command("git", "show", "--color=always", "--stat", "-p", "--end-of-options", hash).Output()
 	if err != nil {

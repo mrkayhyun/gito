@@ -39,15 +39,35 @@ const (
 	paneDetail         // showing git show output
 )
 
+const (
+	// logLimit is how many commits the list loads up front.
+	logLimit = 500
+	// deepSearchLimit caps matches returned by a full-history search.
+	deepSearchLimit = 1000
+)
+
 type logModel struct {
 	commits []git.CommitEntry
-	cursor  int
-	offset  int // first visible row index
-	pane    logPane
+	paths   []string // optional pathspecs from `gito log <path>...`
+	// truncated is true when history is longer than what was loaded, so a
+	// committed search (enter) has to walk the full history via git.
+	truncated bool
+	cursor    int
+	offset    int // first visible row index
+	pane      logPane
 
 	// search narrows the list; searching is true while the input has focus.
 	search    textinput.Model
 	searching bool
+
+	// Full-history search state. Results apply only while the input still
+	// holds deepQuery; editing the query falls back to local filtering.
+	deepQuery   string
+	deepDone    bool
+	deepResults []git.CommitEntry
+	deepErr     error
+
+	detail git.CommitEntry // commit shown in the detail pane
 
 	vp        viewport.Model
 	vpReady   bool
@@ -80,9 +100,12 @@ func matchCommit(c git.CommitEntry, query string) bool {
 
 // filtered returns the commits matching the current search query.
 func (m logModel) filtered() []git.CommitEntry {
-	q := m.search.Value()
-	if strings.TrimSpace(q) == "" {
+	q := strings.TrimSpace(m.search.Value())
+	if q == "" {
 		return m.commits
+	}
+	if m.deepDone && q == m.deepQuery && m.deepErr == nil {
+		return m.deepResults
 	}
 	var out []git.CommitEntry
 	for _, c := range m.commits {
@@ -93,9 +116,30 @@ func (m logModel) filtered() []git.CommitEntry {
 	return out
 }
 
+// deepPending reports whether a full-history search for the current query is
+// still running.
+func (m logModel) deepPending() bool {
+	return !m.deepDone && m.deepQuery != "" && m.deepQuery == strings.TrimSpace(m.search.Value())
+}
+
 // ── tea messages ─────────────────────────────────────────────────────────────
 
 type detailReadyMsg struct{ content string }
+
+type deepSearchMsg struct {
+	query   string
+	results []git.CommitEntry
+	err     error
+}
+
+func searchHistory(query string, paths []string) tea.Cmd {
+	return func() tea.Msg {
+		res, err := git.SearchLog(func(c git.CommitEntry) bool {
+			return matchCommit(c, query)
+		}, deepSearchLimit, paths...)
+		return deepSearchMsg{query: query, results: res, err: err}
+	}
+}
 
 func fetchDetail(hash string) tea.Cmd {
 	return func() tea.Msg {
@@ -135,6 +179,17 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vpReady = true
 		return m, nil
 
+	// ---- full-history search finished ----
+	case deepSearchMsg:
+		if msg.query != m.deepQuery {
+			return m, nil // stale: a newer search superseded it
+		}
+		m.deepDone = true
+		m.deepResults = msg.results
+		m.deepErr = msg.err
+		m.cursor, m.offset = 0, 0
+		return m, nil
+
 	// ---- keyboard ----
 	case tea.KeyMsg:
 		if m.pane == paneDetail {
@@ -168,6 +223,13 @@ func (m logModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.search.Blur()
 		m.searching = false
+		q := strings.TrimSpace(m.search.Value())
+		if m.truncated && q != "" && q != m.deepQuery {
+			m.deepQuery = q
+			m.deepDone = false
+			m.deepResults, m.deepErr = nil, nil
+			return m, searchHistory(q, m.paths)
+		}
 		return m, nil
 	case "up", "down":
 		return m.updateList(msg)
@@ -248,7 +310,8 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.pane = paneDetail
 		m.vpReady = false
-		return m, fetchDetail(commits[m.cursor].Hash)
+		m.detail = commits[m.cursor]
+		return m, fetchDetail(m.detail.Hash)
 	}
 	return m, nil
 }
@@ -282,11 +345,26 @@ func (m logModel) viewList() string {
 
 	// header
 	commits := m.filtered()
-	sb.WriteString(style.Title.Render("gito log"))
-	if len(commits) == len(m.commits) {
-		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d commits", len(m.commits))))
-	} else {
-		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d / %d commits", len(commits), len(m.commits))))
+	title := "gito log"
+	if len(m.paths) > 0 {
+		title += "  ›  " + strings.Join(m.paths, " ")
+	}
+	sb.WriteString(style.Title.Render(title))
+	total := fmt.Sprintf("%d", len(m.commits))
+	if m.truncated {
+		total += "+"
+	}
+	switch {
+	case m.deepPending():
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("log.searching_history")))
+	case m.deepDone && m.deepQuery == strings.TrimSpace(m.search.Value()) && m.deepErr != nil:
+		sb.WriteString(style.Failure.Render("  " + m.deepErr.Error()))
+	case m.deepDone && m.deepQuery == strings.TrimSpace(m.search.Value()):
+		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d %s", len(commits), i18n.T("log.full_history"))))
+	case len(commits) == len(m.commits):
+		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %s commits", total)))
+	default:
+		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d / %s commits", len(commits), total)))
 	}
 	sb.WriteString("\n")
 	if m.searching {
@@ -300,7 +378,14 @@ func (m logModel) viewList() string {
 	}
 
 	if len(commits) == 0 {
-		sb.WriteString(style.Dimmed.Render(i18n.T("log.no_match")) + "\n")
+		if m.deepPending() {
+			return sb.String()
+		}
+		key := "log.no_match"
+		if m.truncated && strings.TrimSpace(m.search.Value()) != m.deepQuery {
+			key = "log.no_match_more" // local miss; history beyond the first page is unsearched
+		}
+		sb.WriteString(style.Dimmed.Render(i18n.T(key)) + "\n")
 		return sb.String()
 	}
 
@@ -343,7 +428,7 @@ func (m logModel) viewList() string {
 }
 
 func (m logModel) viewDetail() string {
-	c := m.filtered()[m.cursor]
+	c := m.detail
 
 	header := style.Title.Render("gito log  ›  detail") + "\n" +
 		hashStyle.Render(c.Short) + "  " +
@@ -360,18 +445,26 @@ func (m logModel) viewDetail() string {
 
 // ── RunLog ───────────────────────────────────────────────────────────────────
 
-func RunLog() {
-	entries, err := git.GetLogEntries(500)
+// RunLog opens the log viewer. paths optionally limit history to commits
+// touching those pathspecs (`gito log <path>...`).
+func RunLog(paths []string) {
+	entries, err := git.GetLogEntries(logLimit, paths...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	if len(entries) == 0 {
-		fmt.Println(i18n.T("log.none"))
+		if len(paths) > 0 && git.HasCommits() {
+			fmt.Println(i18n.T("log.none_path"))
+		} else {
+			fmt.Println(i18n.T("log.none"))
+		}
 		return
 	}
 
 	m := newLogModel(entries)
+	m.paths = paths
+	m.truncated = len(entries) == logLimit
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

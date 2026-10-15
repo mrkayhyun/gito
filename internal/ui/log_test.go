@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mrkayhyun/gito/internal/git"
+	"github.com/mrkayhyun/gito/internal/i18n"
 )
 
 func sampleCommits() []git.CommitEntry {
@@ -152,4 +154,69 @@ func TestLogViewEmptyMatch(t *testing.T) {
 	if c := updated.(logModel).cursor; c != 0 {
 		t.Errorf("G on empty result should keep cursor at 0, got %d", c)
 	}
+}
+
+func TestLogDeepSearchOnlyWhenTruncated(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	updated, _ := m.Update(keyMsg("/"))
+	m = typeInto(t, updated.(logModel), "alice")
+	_, cmd := m.Update(enterKey())
+	if cmd != nil {
+		t.Error("enter should not search history when everything is already loaded")
+	}
+}
+
+func TestLogDeepSearchAppliesAndExpires(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	m.truncated = true
+	updated, _ := m.Update(keyMsg("/"))
+	m = typeInto(t, updated.(logModel), "old")
+	updated, cmd := m.Update(enterKey())
+	m = updated.(logModel)
+	if cmd == nil || m.deepQuery != "old" || !m.deepPending() {
+		t.Fatalf("enter on a truncated log should start a history search: cmd=%v query=%q", cmd != nil, m.deepQuery)
+	}
+	if !strings.Contains(m.View(), i18n.T("log.searching_history")) {
+		t.Error("view should show that the history search is running")
+	}
+
+	// A stale result for a different query is ignored.
+	updated, _ = m.Update(deepSearchMsg{query: "other", results: sampleCommits()})
+	m = updated.(logModel)
+	if !m.deepPending() {
+		t.Fatal("a stale result must not complete the current search")
+	}
+
+	old := git.CommitEntry{Hash: "dddd4444", Short: "dddd444", Subject: "old commit beyond the first page", Author: "Carol"}
+	updated, _ = m.Update(deepSearchMsg{query: "old", results: []git.CommitEntry{old}})
+	m = updated.(logModel)
+	if got := m.filtered(); len(got) != 1 || got[0].Hash != old.Hash {
+		t.Fatalf("filtered should show full-history results, got %+v", got)
+	}
+
+	// Editing the query drops back to local filtering over loaded commits.
+	updated, _ = m.Update(keyMsg("/"))
+	m = typeInto(t, updated.(logModel), "x")
+	if got := len(m.filtered()); got != 0 {
+		t.Errorf("after editing the query, local filter should apply; got %d results", got)
+	}
+}
+
+func TestLogDetailKeepsCommitWhenResultsChange(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	m.truncated = true
+	m.deepQuery = "alice" // a search is in flight
+	m.search.SetValue("alice")
+	updated, _ := m.Update(enterKey())
+	m = updated.(logModel)
+	want := m.detail.Hash
+	if m.pane != paneDetail || want == "" {
+		t.Fatal("precondition: detail pane open")
+	}
+	updated, _ = m.Update(deepSearchMsg{query: "alice", results: nil})
+	m = updated.(logModel)
+	if m.detail.Hash != want {
+		t.Errorf("detail commit changed under the user: %s -> %s", want, m.detail.Hash)
+	}
+	_ = m.View() // must not index into the (now empty) result list
 }

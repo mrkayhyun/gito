@@ -70,7 +70,7 @@ main.go                 // 서브커맨드 라우팅 + help
 | 명령 | 설명 | 주요 키 |
 |------|------|---------|
 | `commit` | 5단계 커밋 마법사(타입→스코프→제목→본문→확인), `gito.json`으로 타입 커스터마이즈 | `y` 커밋, `a` amend, `e` 편집 |
-| `log` | 스크롤 가능한 커밋 로그, 상세 diff 보기, 제목·작성자·해시로 검색 | `↑/↓` 이동, `/` 검색, `enter` 상세, `g/G` 처음/끝 |
+| `log` | 스크롤 가능한 커밋 로그, 상세 diff 보기, 제목·작성자·해시로 검색(enter 시 전체 히스토리 검색), `gito log <경로>...`로 해당 경로를 변경한 커밋만 보기 | `↑/↓` 이동, `/` 검색, `enter` 상세, `g/G` 처음/끝 |
 | `branch` | 퍼지 필터 브랜치 전환 + 생성/이름변경/삭제 | `enter` 전환, `^b` 생성, `^r` 이름변경, `^d` 삭제, `^x` 강제삭제 |
 | `status` | 파일 또는 텍스트 hunk 단위 스테이징/언스테이징, diff/discard | `space` 토글, `a` 전체 스테이지, `d` diff, `D` discard; diff에서 `n/p` hunk 선택, `space` 적용 |
 | `stash` | 스태시 목록 관리 | `p` pop, `a` apply, `d` diff, `D` drop |
@@ -78,7 +78,7 @@ main.go                 // 서브커맨드 라우팅 + help
 | `remote` | 원격 목록, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` 새로고침 |
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
-| `blame` | 파일 선택 후 라인별 blame | `enter` blame 보기 |
+| `blame` | 파일 선택 후 라인별 blame, `gito blame <파일>`로 바로 열기 | `enter` blame 보기 |
 | `undo` | 이전 HEAD로 되돌리기(soft/hard), 브랜치 전환 직후에는 차단 | `s` soft, `h` hard, `y` 확인 |
 
 `gito undo`는 브랜치 전환 직후의 reset을 차단합니다. 이때 이전 HEAD로 reset하면
@@ -151,7 +151,20 @@ Git 저장소 안에서 원하는 하위 명령을 실행합니다.
 gito status     # 변경 파일 스테이징/확인
 gito commit     # 대화형 커밋 작성
 gito log        # 히스토리 탐색
+gito log src/   # src/를 변경한 커밋만
+gito blame main.go   # 파일 blame 바로 열기
 gito diff       # 두 브랜치/태그 비교
+```
+
+### 셸 자동완성
+
+```bash
+# bash (~/.bashrc)
+source <(gito completion bash)
+# zsh (~/.zshrc, compinit 이후)
+source <(gito completion zsh)
+# fish
+gito completion fish > ~/.config/fish/completions/gito.fish
 ```
 
 ### 런처 메뉴
@@ -188,6 +201,7 @@ git 저장소가 아닌 곳에서 명령을 실행하면 친절한 안내 메시
 
 ```json
 {
+  "theme": "auto",
   "commit_types": [
     {"key": "feat",  "label": "feat      새로운 기능"},
     {"key": "fix",   "label": "fix       버그 수정"},
@@ -197,6 +211,9 @@ git 저장소가 아닌 곳에서 명령을 실행하면 친절한 안내 메시
 ```
 
 설정이 없으면 Conventional Commits 기반 기본값(feat/fix/docs/style/refactor/test/chore)을 사용합니다.
+
+색상은 터미널 배경(라이트/다크)에 맞춰 자동으로 바뀝니다. 터미널이 배경색을 알려주지 않는 환경(일부 SSH/tmux)에서는
+`"theme": "light"` / `"dark"` 또는 `GITO_THEME=light|dark`로 지정하세요(환경변수가 우선). `NO_COLOR=1`이면 색을 끕니다.
 
 ## 개발
 
