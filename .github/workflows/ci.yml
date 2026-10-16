@@ -9,8 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  # Releases ship linux/darwin/windows binaries, so test on all three. gofmt
+  # and gosec are OS-independent and run once, on Linux.
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -26,8 +35,12 @@ jobs:
           git config --global user.email "ci@example.com"
           git config --global user.name "CI"
           git config --global init.defaultBranch main
+          # Windows runners default to autocrlf=true; tests write LF fixtures
+          # and compare diffs/hunks byte-for-byte.
+          git config --global core.autocrlf false
 
       - name: Verify formatting
+        if: runner.os == 'Linux'
         run: |
           fmt_out=$(gofmt -l .)
           if [ -n "$fmt_out" ]; then
@@ -51,6 +64,7 @@ jobs:
       # so the rule is a systemic false positive here; all other rules stay active.
       # The exclusion and its reasoning are also documented in SECURITY.md.
       - name: Security scan (gosec)
+        if: runner.os == 'Linux'
         uses: securego/gosec@v2.29.0
         with:
           args: '-exclude=G204 ./...'
