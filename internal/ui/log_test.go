@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -219,4 +222,127 @@ func TestLogDetailKeepsCommitWhenResultsChange(t *testing.T) {
 		t.Errorf("detail commit changed under the user: %s -> %s", want, m.detail.Hash)
 	}
 	_ = m.View() // must not index into the (now empty) result list
+}
+
+func manyCommits(n, from int) []git.CommitEntry {
+	out := make([]git.CommitEntry, n)
+	for i := range out {
+		h := fmt.Sprintf("%08x", from+i)
+		out[i] = git.CommitEntry{Hash: h, Short: h[:7], Subject: fmt.Sprintf("c%d", from+i), Author: "A"}
+	}
+	return out
+}
+
+func TestLogEditingQueryCancelsPendingSearch(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	m.truncated = true
+	updated, _ := m.Update(keyMsg("/"))
+	m = typeInto(t, updated.(logModel), "old")
+	updated, _ = m.Update(enterKey())
+	m = updated.(logModel)
+	if m.deepCancel == nil {
+		t.Fatal("precondition: a history search should be running")
+	}
+	cancelled := false
+	m.deepCancel = func() { cancelled = true }
+
+	updated, _ = m.Update(keyMsg("/"))
+	m = typeInto(t, updated.(logModel), "x")
+	if !cancelled || m.deepCancel != nil || m.deepQuery != "" {
+		t.Errorf("editing the query should cancel the search: cancelled=%v query=%q", cancelled, m.deepQuery)
+	}
+}
+
+func TestLogQuitCancelsPendingSearch(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	cancelled := false
+	m.deepQuery, m.deepCancel = "q", func() { cancelled = true }
+	if _, cmd := m.Update(keyMsg("q")); cmd == nil || !cancelled {
+		t.Error("quitting should cancel a running history search")
+	}
+}
+
+func TestLogNewSearchCancelsPrevious(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	m.truncated = true
+	first := false
+	m.deepQuery, m.deepCancel = "first", func() { first = true }
+	m.search.SetValue("second")
+	m.searching = true
+	updated, cmd := m.Update(enterKey())
+	m = updated.(logModel)
+	if !first || cmd == nil || m.deepQuery != "second" {
+		t.Errorf("a new search should cancel the old one and start: cancelled=%v query=%q", first, m.deepQuery)
+	}
+	m.cancelDeep() // don't leak the real search started above
+}
+
+func TestLogCancelledResultIgnored(t *testing.T) {
+	m := newLogModel(sampleCommits())
+	m.deepQuery = "q"
+	updated, _ := m.Update(deepSearchMsg{query: "q", err: context.Canceled})
+	if updated.(logModel).deepDone {
+		t.Error("a cancelled search must not be shown as finished")
+	}
+}
+
+func TestLogLoadsNextPageAtEnd(t *testing.T) {
+	m := newLogModel(manyCommits(logLimit, 0))
+	m.truncated = true
+	updated, cmd := m.Update(keyMsg("G"))
+	m = updated.(logModel)
+	if cmd == nil || !m.loadingMore {
+		t.Fatal("reaching the last loaded commit should load the next page")
+	}
+	// Further keys at the end must not queue duplicate loads.
+	if _, cmd := m.Update(keyMsg("j")); cmd != nil {
+		t.Error("only one page load may be in flight")
+	}
+	// A stale page (wrong offset) is ignored.
+	updated, _ = m.Update(logPageMsg{skip: 123, entries: manyCommits(3, 9000)})
+	if len(updated.(logModel).commits) != logLimit {
+		t.Fatal("a page for the wrong offset must be ignored")
+	}
+	updated, _ = m.Update(logPageMsg{skip: logLimit, entries: manyCommits(10, logLimit)})
+	m = updated.(logModel)
+	if len(m.commits) != logLimit+10 || m.truncated || m.loadingMore {
+		t.Fatalf("after a short last page: len=%d truncated=%v loading=%v", len(m.commits), m.truncated, m.loadingMore)
+	}
+	updated, _ = m.Update(keyMsg("j"))
+	if c := updated.(logModel).cursor; c != logLimit {
+		t.Errorf("j should continue into the new page, cursor=%d", c)
+	}
+}
+
+func TestLogNoPagingWhileFiltered(t *testing.T) {
+	m := newLogModel(manyCommits(logLimit, 0))
+	m.truncated = true
+	m.search.SetValue("c1")
+	if _, cmd := m.Update(keyMsg("G")); cmd != nil {
+		t.Error("paging must not run while a filter is active (enter searches history instead)")
+	}
+}
+
+func TestLogPageErrorStopsPaging(t *testing.T) {
+	m := newLogModel(manyCommits(logLimit, 0))
+	m.truncated, m.loadingMore = true, true
+	updated, _ := m.Update(logPageMsg{skip: logLimit, err: errors.New("boom")})
+	m = updated.(logModel)
+	if m.truncated || m.loadingMore || !strings.Contains(m.View(), "boom") {
+		t.Error("a page error should stop paging and be shown")
+	}
+}
+
+func TestLogViewFitsTerminalHeight(t *testing.T) {
+	for _, filtered := range []bool{false, true} {
+		m := newLogModel(manyCommits(50, 0))
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
+		m = updated.(logModel)
+		if filtered {
+			m.search.SetValue("c")
+		}
+		if lines := strings.Count(m.View(), "\n") + 1; lines > 12 {
+			t.Errorf("filtered=%v: view is %d lines in a 12-line terminal; the title scrolls off", filtered, lines)
+		}
+	}
 }

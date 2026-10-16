@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -66,6 +68,12 @@ type logModel struct {
 	deepDone    bool
 	deepResults []git.CommitEntry
 	deepErr     error
+	// deepCancel stops the in-flight history search; nil when none runs.
+	deepCancel context.CancelFunc
+
+	// loadingMore is true while the next page of history is being read.
+	loadingMore bool
+	pageErr     error
 
 	detail git.CommitEntry // commit shown in the detail pane
 
@@ -116,6 +124,34 @@ func (m logModel) filtered() []git.CommitEntry {
 	return out
 }
 
+// cancelDeep stops a running history search, if any. The search's query is
+// forgotten so re-entering it starts a fresh search instead of waiting on
+// the cancelled one.
+func (m logModel) cancelDeep() logModel {
+	if m.deepCancel != nil {
+		m.deepCancel()
+		m.deepCancel = nil
+		if !m.deepDone {
+			m.deepQuery = ""
+		}
+	}
+	return m
+}
+
+func (m logModel) quit() (tea.Model, tea.Cmd) {
+	return m.cancelDeep(), tea.Quit
+}
+
+// maybeLoadMore fetches the next page once the cursor reaches the last
+// loaded commit of an unfiltered, truncated list.
+func (m logModel) maybeLoadMore() (logModel, tea.Cmd) {
+	if !m.truncated || m.loadingMore || m.search.Value() != "" || m.cursor < len(m.commits)-1 {
+		return m, nil
+	}
+	m.loadingMore = true
+	return m, loadPage(len(m.commits), m.paths)
+}
+
 // deepPending reports whether a full-history search for the current query is
 // still running.
 func (m logModel) deepPending() bool {
@@ -132,9 +168,22 @@ type deepSearchMsg struct {
 	err     error
 }
 
-func searchHistory(query string, paths []string) tea.Cmd {
+type logPageMsg struct {
+	skip    int
+	entries []git.CommitEntry
+	err     error
+}
+
+func loadPage(skip int, paths []string) tea.Cmd {
 	return func() tea.Msg {
-		res, err := git.SearchLog(func(c git.CommitEntry) bool {
+		entries, err := git.GetLogPage(skip, logLimit, paths...)
+		return logPageMsg{skip: skip, entries: entries, err: err}
+	}
+}
+
+func searchHistory(ctx context.Context, query string, paths []string) tea.Cmd {
+	return func() tea.Msg {
+		res, err := git.SearchLog(ctx, func(c git.CommitEntry) bool {
 			return matchCommit(c, query)
 		}, deepSearchLimit, paths...)
 		return deepSearchMsg{query: query, results: res, err: err}
@@ -181,13 +230,29 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- full-history search finished ----
 	case deepSearchMsg:
-		if msg.query != m.deepQuery {
+		if msg.query != m.deepQuery || errors.Is(msg.err, context.Canceled) {
 			return m, nil // stale: a newer search superseded it
 		}
+		m.deepCancel = nil
 		m.deepDone = true
 		m.deepResults = msg.results
 		m.deepErr = msg.err
 		m.cursor, m.offset = 0, 0
+		return m, nil
+
+	// ---- next page of history ----
+	case logPageMsg:
+		if msg.skip != len(m.commits) {
+			return m, nil // stale
+		}
+		m.loadingMore = false
+		if msg.err != nil {
+			m.pageErr = msg.err
+			m.truncated = false // stop retrying on every keypress
+			return m, nil
+		}
+		m.commits = append(m.commits, msg.entries...)
+		m.truncated = len(msg.entries) == logLimit
 		return m, nil
 
 	// ---- keyboard ----
@@ -213,8 +278,9 @@ func (m logModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m logModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
-		return m, tea.Quit
+		return m.quit()
 	case "esc":
+		m = m.cancelDeep()
 		m.search.SetValue("")
 		m.search.Blur()
 		m.searching = false
@@ -225,10 +291,13 @@ func (m logModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searching = false
 		q := strings.TrimSpace(m.search.Value())
 		if m.truncated && q != "" && q != m.deepQuery {
+			m = m.cancelDeep()
+			ctx, cancel := context.WithCancel(context.Background())
+			m.deepCancel = cancel
 			m.deepQuery = q
 			m.deepDone = false
 			m.deepResults, m.deepErr = nil, nil
-			return m, searchHistory(q, m.paths)
+			return m, searchHistory(ctx, q, m.paths)
 		}
 		return m, nil
 	case "up", "down":
@@ -239,6 +308,9 @@ func (m logModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.search, cmd = m.search.Update(msg)
 	if m.search.Value() != prev {
 		m.cursor, m.offset = 0, 0
+		if !m.deepDone {
+			m = m.cancelDeep() // the running search is for the old query
+		}
 	}
 	return m, cmd
 }
@@ -269,13 +341,14 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		// esc first clears an active filter, then quits.
 		if m.search.Value() != "" {
+			m = m.cancelDeep()
 			m.search.SetValue("")
 			m.cursor, m.offset = 0, 0
 			return m, nil
 		}
-		return m, tea.Quit
+		return m.quit()
 	case "ctrl+c", "q":
-		return m, tea.Quit
+		return m.quit()
 	case "/":
 		m.searching = true
 		return m, m.search.Focus()
@@ -293,6 +366,7 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.offset = m.cursor - vis + 1
 			}
 		}
+		return m.maybeLoadMore()
 	case "g": // jump to top
 		m.cursor = 0
 		m.offset = 0
@@ -304,6 +378,7 @@ func (m logModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor-vis+1 > 0 {
 			m.offset = m.cursor - vis + 1
 		}
+		return m.maybeLoadMore()
 	case "enter":
 		if m.cursor >= len(commits) {
 			return m, nil
@@ -366,6 +441,12 @@ func (m logModel) viewList() string {
 	default:
 		sb.WriteString(style.Dimmed.Render(fmt.Sprintf("  %d / %s commits", len(commits), total)))
 	}
+	if m.loadingMore {
+		sb.WriteString(style.Dimmed.Render("  " + i18n.T("log.loading_more")))
+	}
+	if m.pageErr != nil {
+		sb.WriteString(style.Failure.Render("  " + m.pageErr.Error()))
+	}
 	sb.WriteString("\n")
 	if m.searching {
 		sb.WriteString(style.Dimmed.Render(i18n.T("log.hint_search")))
@@ -424,7 +505,9 @@ func (m logModel) viewList() string {
 		sb.WriteString("\n")
 	}
 
-	return sb.String()
+	// Header (3 lines) + visibleRows rows fill the screen exactly; a trailing
+	// newline would add one more line and scroll the title off the top.
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 func (m logModel) viewDetail() string {

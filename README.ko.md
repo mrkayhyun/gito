@@ -70,12 +70,12 @@ main.go                 // 서브커맨드 라우팅 + help
 | 명령 | 설명 | 주요 키 |
 |------|------|---------|
 | `commit` | 5단계 커밋 마법사(타입→스코프→제목→본문→확인), `gito.json`으로 타입 커스터마이즈 | `y` 커밋, `a` amend, `e` 편집 |
-| `log` | 스크롤 가능한 커밋 로그, 상세 diff 보기, 제목·작성자·해시로 검색(enter 시 전체 히스토리 검색), `gito log <경로>...`로 해당 경로를 변경한 커밋만 보기 | `↑/↓` 이동, `/` 검색, `enter` 상세, `g/G` 처음/끝 |
+| `log` | 스크롤 가능한 커밋 로그, 상세 diff 보기, 제목·작성자·해시로 검색(enter 시 전체 히스토리 검색), 끝까지 내리면 다음 500개를 이어서 불러옴, `gito log <경로>...`로 해당 경로를 변경한 커밋만 보기 | `↑/↓` 이동, `/` 검색, `enter` 상세, `g/G` 처음/끝 |
 | `branch` | 퍼지 필터 브랜치 전환 + 생성/이름변경/삭제 | `enter` 전환, `^b` 생성, `^r` 이름변경, `^d` 삭제, `^x` 강제삭제 |
 | `status` | 파일 또는 텍스트 hunk 단위 스테이징/언스테이징, diff/discard | `space` 토글, `a` 전체 스테이지, `d` diff, `D` discard; diff에서 `n/p` hunk 선택, `space` 적용 |
 | `stash` | 스태시 목록 관리 | `p` pop, `a` apply, `d` diff, `D` drop |
 | `tag` | 태그 생성(경량/주석)/삭제/원격 push | `c` 생성, `p` push, `P` 원격삭제, `D` 삭제 |
-| `remote` | 원격 목록, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` 새로고침 |
+| `remote` | 현재 브랜치 push / pull, fetch, upstream ahead/behind. push는 확인 후 실행하며 force하지 않음(첫 push 때 `-u`로 upstream 설정), pull은 fast-forward만 | `p` push, `l` pull, `f` fetch, `F` fetch all, `r` 새로고침 |
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
 | `blame` | 파일 선택 후 라인별 blame, `gito blame <파일>`로 바로 열기 | `enter` blame 보기 |

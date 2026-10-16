@@ -2,6 +2,7 @@ package git
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,10 +42,18 @@ func parseLogLine(line string) (CommitEntry, bool) {
 // GetLogEntries returns the n most recent commits reachable from HEAD,
 // optionally limited to commits touching paths.
 func GetLogEntries(n int, paths ...string) ([]CommitEntry, error) {
+	return GetLogPage(0, n, paths...)
+}
+
+// GetLogPage returns up to n commits after skipping the newest skip, in the
+// same order and with the same path filter as GetLogEntries. It lets a
+// viewer page through history without loading all of it.
+func GetLogPage(skip, n int, paths ...string) ([]CommitEntry, error) {
 	if !HasCommits() {
 		return nil, nil
 	}
-	out, err := exec.Command("git", logArgs([]string{fmt.Sprintf("--max-count=%d", n)}, paths)...).Output()
+	extra := []string{fmt.Sprintf("--max-count=%d", n), fmt.Sprintf("--skip=%d", skip)}
+	out, err := exec.Command("git", logArgs(extra, paths)...).Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
 	}
@@ -61,11 +70,13 @@ func GetLogEntries(n int, paths ...string) ([]CommitEntry, error) {
 // to paths) and returns up to limit commits for which match returns true,
 // newest first. git's output is streamed, and git is stopped as soon as the
 // limit is reached, so searching a huge history for a common term stays cheap.
-func SearchLog(match func(CommitEntry) bool, limit int, paths ...string) ([]CommitEntry, error) {
+// Cancelling ctx kills git and returns ctx.Err(); callers use it to abandon a
+// search the user has moved on from.
+func SearchLog(ctx context.Context, match func(CommitEntry) bool, limit int, paths ...string) ([]CommitEntry, error) {
 	if !HasCommits() || limit <= 0 {
 		return nil, nil
 	}
-	cmd := exec.Command("git", logArgs(nil, paths)...)
+	cmd := exec.CommandContext(ctx, "git", logArgs(nil, paths)...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
@@ -92,6 +103,9 @@ func SearchLog(match func(CommitEntry) bool, limit int, paths ...string) ([]Comm
 	}
 	scanErr := sc.Err()
 	waitErr := cmd.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if stopped {
 		return found, nil // killed on purpose; its exit status is meaningless
 	}

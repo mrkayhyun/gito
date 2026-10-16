@@ -38,7 +38,16 @@ type remoteModel struct {
 	vp      viewport.Model
 	vpReady bool
 
+	branch string // current branch; "" when HEAD is detached
+
+	// confirmPush is set while "push?" awaits y; pushRemote is the remote
+	// a branch without upstream will be pushed to (and tracked on).
+	confirmPush bool
+	pushRemote  string
+
 	loading       bool
+	running       string // git subcommand in flight, for the status line
+	outputTitle   string
 	errMsg        string
 	successMsg    string
 	width, height int
@@ -49,9 +58,12 @@ type remoteListMsg struct {
 	ahead       int
 	behind      int
 	hasUpstream bool
+	branch      string
 }
 type remoteErrMsg struct{ err error }
-type remoteFetchMsg struct{ output string }
+
+// remoteOutputMsg carries the output of a fetch/push/pull for the output pane.
+type remoteOutputMsg struct{ title, output string }
 
 func doRemoteLoad() tea.Cmd {
 	return func() tea.Msg {
@@ -60,7 +72,8 @@ func doRemoteLoad() tea.Cmd {
 			return remoteErrMsg{err}
 		}
 		ahead, behind, has := git.GetAheadBehind()
-		return remoteListMsg{remotes, ahead, behind, has}
+		branch, _ := git.CurrentBranch()
+		return remoteListMsg{remotes, ahead, behind, has, branch}
 	}
 }
 
@@ -70,7 +83,27 @@ func doFetch(remote string) tea.Cmd {
 		if err != nil {
 			return remoteErrMsg{err}
 		}
-		return remoteFetchMsg{out}
+		return remoteOutputMsg{"fetch", out}
+	}
+}
+
+func doPush(remote string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := git.Push(remote)
+		if err != nil {
+			return remoteErrMsg{err}
+		}
+		return remoteOutputMsg{"push", out}
+	}
+}
+
+func doPull() tea.Cmd {
+	return func() tea.Msg {
+		out, err := git.Pull()
+		if err != nil {
+			return remoteErrMsg{err}
+		}
+		return remoteOutputMsg{"pull", out}
 	}
 }
 
@@ -88,6 +121,7 @@ func (m remoteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case remoteListMsg:
 		m.remotes = msg.remotes
 		m.ahead, m.behind, m.hasUpstream = msg.ahead, msg.behind, msg.hasUpstream
+		m.branch = msg.branch
 		m.loading = false
 		if m.cursor >= len(m.remotes) && len(m.remotes) > 0 {
 			m.cursor = len(m.remotes) - 1
@@ -96,9 +130,12 @@ func (m remoteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case remoteErrMsg:
 		m.errMsg = msg.err.Error()
 		m.loading = false
+		// A failed push/pull may still have fetched or changed refs.
+		return m, doRemoteLoad()
 
-	case remoteFetchMsg:
+	case remoteOutputMsg:
 		m.loading = false
+		m.outputTitle = msg.title
 		m.pane = remotePaneOutput
 		m.vp = viewport.New(m.width, m.remoteVPHeight())
 		m.vp.SetContent(msg.output)
@@ -108,6 +145,9 @@ func (m remoteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.pane == remotePaneOutput {
 			return m.updateOutput(msg)
+		}
+		if m.confirmPush {
+			return m.updateConfirmPush(msg)
 		}
 		return m.updateList(msg)
 	}
@@ -137,7 +177,56 @@ func (m remoteModel) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateConfirmPush handles the y/other answer to the push prompt. Pushing
+// publishes commits, so it always asks first; esc or any other key cancels.
+func (m remoteModel) updateConfirmPush(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.confirmPush = false
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+	if msg.String() != "y" {
+		return m, nil
+	}
+	return m.start("push", doPush(m.pushRemote))
+}
+
+func (m remoteModel) start(op string, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	m.loading = true
+	m.running = op
+	m.successMsg = ""
+	return m, cmd
+}
+
+// requestPush validates that a push makes sense and, if so, opens the
+// confirmation prompt.
+func (m remoteModel) requestPush() (tea.Model, tea.Cmd) {
+	switch {
+	case m.branch == "":
+		m.errMsg = i18n.T("remote.detached")
+	case m.hasUpstream && m.behind > 0:
+		m.errMsg = i18n.Tf("remote.pull_first", m.behind)
+	case m.hasUpstream && m.ahead == 0:
+		m.successMsg = i18n.T("remote.nothing_to_push")
+	case !m.hasUpstream && m.cursor >= len(m.remotes):
+		m.errMsg = i18n.T("remote.none")
+	default:
+		m.pushRemote = ""
+		if !m.hasUpstream {
+			m.pushRemote = m.remotes[m.cursor].Name
+		}
+		m.confirmPush = true
+	}
+	return m, nil
+}
+
 func (m remoteModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.loading {
+		// One git operation at a time; only quitting is allowed meanwhile.
+		if k := msg.String(); k == "ctrl+c" || k == "q" || k == "esc" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
 	m.errMsg = ""
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
@@ -152,14 +241,23 @@ func (m remoteModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "f": // fetch selected remote
 		if m.cursor < len(m.remotes) {
-			m.loading = true
-			m.successMsg = ""
-			return m, doFetch(m.remotes[m.cursor].Name)
+			return m.start("fetch", doFetch(m.remotes[m.cursor].Name))
 		}
 	case "F": // fetch all
-		m.loading = true
+		return m.start("fetch", doFetch(""))
+	case "p": // push current branch (asks first)
 		m.successMsg = ""
-		return m, doFetch("")
+		return m.requestPush()
+	case "l": // fast-forward pull
+		m.successMsg = ""
+		switch {
+		case m.branch == "":
+			m.errMsg = i18n.T("remote.detached")
+		case !m.hasUpstream:
+			m.errMsg = i18n.T("remote.pull_needs_upstream")
+		default:
+			return m.start("pull", doPull())
+		}
 	case "r": // refresh ahead/behind
 		return m, doRemoteLoad()
 	}
@@ -193,8 +291,18 @@ func (m remoteModel) viewList() string {
 		sb.WriteString(style.Dimmed.Render(i18n.T("remote.no_upstream")) + "\n\n")
 	}
 
+	if m.confirmPush {
+		var q string
+		if m.pushRemote == "" {
+			q = i18n.Tf("remote.confirm_push", m.ahead, m.branch)
+		} else {
+			q = i18n.Tf("remote.confirm_push_new", m.branch, m.pushRemote)
+		}
+		sb.WriteString(style.Label.Render(q) + "\n")
+		sb.WriteString(style.Dimmed.Render(i18n.T("common.confirm_yn")) + "\n\n")
+	}
 	if m.loading {
-		sb.WriteString(style.Label.Render(i18n.T("remote.fetching")) + "\n\n")
+		sb.WriteString(style.Label.Render(i18n.Tf("remote.running", m.running)) + "\n\n")
 	}
 	if m.errMsg != "" {
 		sb.WriteString(style.Failure.Render("! "+m.errMsg) + "\n\n")
@@ -221,7 +329,7 @@ func (m remoteModel) viewList() string {
 
 func (m remoteModel) viewOutput() string {
 	var sb strings.Builder
-	sb.WriteString(style.Title.Render("gito remote  ›  fetch") + "\n")
+	sb.WriteString(style.Title.Render("gito remote  ›  "+m.outputTitle) + "\n")
 	sb.WriteString(style.Dimmed.Render(i18n.T("hint.scroll_back")) + "\n\n")
 	if !m.vpReady {
 		sb.WriteString(style.Dimmed.Render("  " + i18n.T("common.loading")))
