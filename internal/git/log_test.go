@@ -1,6 +1,8 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"os"
 	"runtime"
 	"strings"
@@ -40,7 +42,7 @@ func TestSearchLog(t *testing.T) {
 	}
 	match := func(c CommitEntry) bool { return strings.Contains(c.Subject, "x") }
 
-	all, err := SearchLog(match, 100)
+	all, err := SearchLog(context.Background(), match, 100)
 	if err != nil || len(all) != 3 {
 		t.Fatalf("SearchLog = %d results, %v; want 3", len(all), err)
 	}
@@ -49,17 +51,17 @@ func TestSearchLog(t *testing.T) {
 	}
 
 	// Stopping early at the limit must not surface git's kill as an error.
-	two, err := SearchLog(match, 2)
+	two, err := SearchLog(context.Background(), match, 2)
 	if err != nil || len(two) != 2 {
 		t.Errorf("SearchLog(limit 2) = %d results, %v; want 2, nil", len(two), err)
 	}
 
-	scoped, err := SearchLog(func(CommitEntry) bool { return true }, 100, "y1.txt")
+	scoped, err := SearchLog(context.Background(), func(CommitEntry) bool { return true }, 100, "y1.txt")
 	if err != nil || len(scoped) != 1 || scoped[0].Subject != "touch y1" {
 		t.Errorf("SearchLog scoped to y1.txt = %+v, %v", scoped, err)
 	}
 
-	if none, err := SearchLog(match, 0); err != nil || none != nil {
+	if none, err := SearchLog(context.Background(), match, 0); err != nil || none != nil {
 		t.Errorf("limit 0 should return nothing, got %v, %v", none, err)
 	}
 }
@@ -98,5 +100,44 @@ func TestIsTrackedFile(t *testing.T) {
 		if got := IsTrackedFile(path); got != want {
 			t.Errorf("IsTrackedFile(%q) = %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestSearchLogCancel(t *testing.T) {
+	cleanup := setupRepo(t)
+	defer cleanup()
+	addCommit(t, "a.txt", "a", "a")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	res, err := SearchLog(ctx, func(CommitEntry) bool { return true }, 100)
+	if !errors.Is(err, context.Canceled) || res != nil {
+		t.Errorf("cancelled search = %v, %v; want nil, context.Canceled", res, err)
+	}
+}
+
+func TestGetLogPage(t *testing.T) {
+	cleanup := setupRepo(t) // "initial commit"
+	defer cleanup()
+	for _, f := range []string{"1", "2", "3", "4"} {
+		addCommit(t, f+".txt", f, "c"+f)
+	}
+	first, err := GetLogPage(0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := GetLogPage(2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, err := GetLogPage(4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range append(append(first, second...), last...) {
+		got = append(got, e.Subject)
+	}
+	if strings.Join(got, ",") != "c4,c3,c2,c1,initial commit" {
+		t.Errorf("pages = %v", got)
 	}
 }
