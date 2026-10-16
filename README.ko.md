@@ -75,7 +75,7 @@ main.go                 // 서브커맨드 라우팅 + help
 | `status` | 파일 또는 텍스트 hunk 단위 스테이징/언스테이징, diff/discard | `space` 토글, `a` 전체 스테이지, `d` diff, `D` discard; diff에서 `n/p` hunk 선택, `space` 적용 |
 | `stash` | 스태시 목록 관리 | `p` pop, `a` apply, `d` diff, `D` drop |
 | `tag` | 태그 생성(경량/주석)/삭제/원격 push | `c` 생성, `p` push, `P` 원격삭제, `D` 삭제 |
-| `remote` | 원격 목록, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` 새로고침 |
+| `remote` | 현재 브랜치 push / pull, fetch, upstream ahead/behind. push는 확인 후 실행하며 force하지 않음(첫 push 때 `-u`로 upstream 설정), pull은 fast-forward만 | `p` push, `l` pull, `f` fetch, `F` fetch all, `r` 새로고침 |
 | `diff` | 두 ref(브랜치/태그) 선택 후 비교 | `enter` 선택(base→target) |
 | `reflog` | reflog 탐색 및 커밋 복구(비파괴적: 새 브랜치 생성) | `b` 이 지점으로 브랜치 생성 |
 | `blame` | 파일 선택 후 라인별 blame, `gito blame <파일>`로 바로 열기 | `enter` blame 보기 |

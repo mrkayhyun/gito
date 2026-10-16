@@ -61,7 +61,7 @@ gito branch    Fuzzy branch switcher / create / rename / delete
 gito status    Interactive stage / unstage / diff / discard
 gito stash     Stash list  (pop / apply / show diff / drop)
 gito tag       Tag manager (create / delete / push / show diff)
-gito remote    Remote list (fetch / ahead-behind status)
+gito remote    Remote list (push / pull / fetch / ahead-behind status)
 gito diff      Compare two refs (branch/tag) and view the diff
 gito reflog    Browse reflog and recover commits into a new branch
 gito blame     Pick a file (or pass one) and view line-by-line blame
@@ -79,7 +79,7 @@ gito worktree  Manage git worktrees (list / add / remove)
 | `status` | Stage / unstage files or individual text hunks, diff / discard | `space` toggle, `a` stage all, `d` diff, `D` discard; in diff: `n/p` select hunk, `space` stage/unstage |
 | `stash` | Manage the stash list | `p` pop, `a` apply, `d` diff, `D` drop |
 | `tag` | Create (lightweight/annotated) / delete / push tags | `c` create, `p` push, `P` delete remote, `D` delete |
-| `remote` | Remote list, fetch, upstream ahead/behind | `f` fetch, `F` fetch all, `r` refresh |
+| `remote` | Push / pull the current branch, fetch, upstream ahead/behind. Push asks first and never forces (sets upstream with `-u` on first push); pull is fast-forward only | `p` push, `l` pull, `f` fetch, `F` fetch all, `r` refresh |
 | `diff` | Pick two refs (branch/tag) and compare | `enter` select (base → target) |
 | `reflog` | Browse reflog and recover commits (non-destructive: creates a new branch) | `b` branch from here |
 | `blame` | Pick a file and view line-by-line blame; `gito blame <file>` opens it directly | `enter` view blame |
